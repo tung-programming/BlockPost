@@ -55,7 +55,12 @@ function ProfileSetup() {
         return;
       }
 
-      // Request account access
+      // Request account access - force account selection popup
+      await window.ethereum.request({
+        method: "wallet_requestPermissions",
+        params: [{ eth_accounts: {} }],
+      });
+      
       const provider = new ethers.BrowserProvider(window.ethereum);
       const accounts = await provider.send("eth_requestAccounts", []);
       const address = accounts[0];
@@ -88,11 +93,15 @@ function ProfileSetup() {
         throw new Error("No authenticated user found");
       }
 
+      const walletLoginUserId = localStorage.getItem('walletLoginUserId');
+      const userId = walletLoginUserId || user.uid;
+      const userEmail = user.email || localStorage.getItem('walletLoginEmail');
+
       let profilePicUrl = "";
 
       // Upload profile picture if provided
       if (profilePic) {
-        const storageRef = ref(storage, `profilePics/${user.uid}`);
+        const storageRef = ref(storage, `profilePics/${userId}`);
         await uploadBytes(storageRef, profilePic);
         profilePicUrl = await getDownloadURL(storageRef);
       }
@@ -109,11 +118,11 @@ function ProfileSetup() {
       };
 
       // Update user document
-      await firestoreOperations.updateUser(user.uid, userData);
+      await firestoreOperations.updateUser(userId, userData);
 
       // Link wallet if connected
       if (walletAddress) {
-        await firestoreOperations.linkWallet(walletAddress, user.uid, user.email);
+        await firestoreOperations.linkWallet(walletAddress, userId, userEmail);
       }
 
       console.log("Profile setup complete");

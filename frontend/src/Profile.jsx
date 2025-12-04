@@ -37,10 +37,14 @@ function Profile() {
       const user = auth.currentUser;
       if (!user) return;
 
-      const result = await firestoreOperations.getUser(user.uid);
+      // Check if this is a wallet-based login
+      const walletLoginUserId = localStorage.getItem('walletLoginUserId');
+      const userId = walletLoginUserId || user.uid;
+
+      const result = await firestoreOperations.getUser(userId);
       
       if (result.success) {
-        setUserData({ id: user.uid, ...result.data });
+        setUserData({ id: userId, ...result.data });
         setEditFormData({
           displayName: result.data.displayName || "",
           bio: result.data.bio || "",
@@ -75,13 +79,17 @@ function Profile() {
       const accounts = await provider.send("eth_requestAccounts", []);
       const walletAddress = accounts[0];
 
+      const walletLoginUserId = localStorage.getItem('walletLoginUserId');
+      const userId = walletLoginUserId || auth.currentUser.uid;
+      const userEmail = userData.email || auth.currentUser?.email;
+
       // Check if wallet is already linked to another account
       const isLinked = await firestoreOperations.isWalletLinked(walletAddress);
       
       if (isLinked) {
         // Check if it's linked to this user
         const result = await firestoreOperations.getUserByWallet(walletAddress);
-        if (result.success && result.data.id !== auth.currentUser.uid) {
+        if (result.success && result.data.id !== userId) {
           setError("This wallet is already linked to another account.");
           setConnectingWallet(false);
           return;
@@ -91,8 +99,8 @@ function Profile() {
       // Link wallet to user
       await firestoreOperations.linkWallet(
         walletAddress,
-        auth.currentUser.uid,
-        auth.currentUser.email
+        userId,
+        userEmail
       );
 
       setSuccess("Wallet connected successfully!");
@@ -135,17 +143,20 @@ function Profile() {
 
     try {
       const user = auth.currentUser;
+      const walletLoginUserId = localStorage.getItem('walletLoginUserId');
+      const userId = walletLoginUserId || user.uid;
+      
       let profilePicUrl = userData.profilePicUrl || "";
 
       // Upload new profile picture if changed
       if (profilePic) {
-        const storageRef = ref(storage, `profilePics/${user.uid}`);
+        const storageRef = ref(storage, `profilePics/${userId}`);
         await uploadBytes(storageRef, profilePic);
         profilePicUrl = await getDownloadURL(storageRef);
       }
 
       // Update user document
-      await firestoreOperations.updateUser(user.uid, {
+      await firestoreOperations.updateUser(userId, {
         displayName: editFormData.displayName,
         bio: editFormData.bio,
         dob: editFormData.dob,
