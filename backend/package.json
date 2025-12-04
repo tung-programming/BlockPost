@@ -2,10 +2,11 @@
   "name": "blockpost-backend",
   "version": "1.0.0",
   "description": "Backend API for BlockPost - Content hashing and verification",
-  "main": "src/api.js",
+  "main": "dist/api.js",
   "scripts": {
-    "start": "node src/api.js",
-    "dev": "nodemon src/api.js",
+    "start": "node dist/api.js",
+    "dev": "tsx watch src/api.ts",
+    "build": "tsc",
     "test": "jest"
   },
   "keywords": ["blockchain", "content-verification", "hashing", "ipfs"],
@@ -20,6 +21,12 @@
   },
   "devDependencies": {
     "nodemon": "^3.0.1",
-    "jest": "^29.6.4"
+    "jest": "^29.6.4",
+    "typescript": "^5.3.3",
+    "tsx": "^4.7.0",
+    "@types/node": "^20.10.6",
+    "@types/express": "^4.17.21",
+    "@types/cors": "^2.8.17",
+    "@types/multer": "^1.4.11"
   }
 }

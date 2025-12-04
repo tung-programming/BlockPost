@@ -1,6 +1,5 @@
 /**
  * IPFS Storage Module
- * PERSON 3: Implement IPFS integration here
  * 
  * Responsibilities:
  * - Upload media files to IPFS
@@ -8,7 +7,15 @@
  * - Pin important content
  */
 
+interface FileMetadata {
+  name?: string;
+  description?: string;
+  [key: string]: any;
+}
+
 class IPFSStorage {
+  private client: any;
+
   constructor() {
     // TODO: Initialize IPFS client (use Pinata, Infura, or local IPFS node)
     this.client = null;
@@ -16,31 +23,31 @@ class IPFSStorage {
 
   /**
    * Upload file to IPFS
-   * @param {Buffer} fileBuffer - The file to upload
-   * @param {Object} metadata - File metadata
-   * @returns {Promise<string>} - IPFS CID
+   * @param fileBuffer - The file to upload
+   * @param metadata - File metadata
+   * @returns IPFS CID (Content Identifier)
    */
-  async uploadFile(fileBuffer, metadata = {}) {
+  async uploadFile(fileBuffer: Buffer, metadata: FileMetadata = {}): Promise<string> {
     // TODO: Implement IPFS upload
     throw new Error("Not implemented yet");
   }
 
   /**
    * Get file from IPFS
-   * @param {string} cid - The IPFS CID
-   * @returns {Promise<Buffer>} - The file content
+   * @param cid - The IPFS CID
+   * @returns The file content
    */
-  async getFile(cid) {
+  async getFile(cid: string): Promise<Buffer> {
     // TODO: Implement IPFS retrieval
     throw new Error("Not implemented yet");
   }
 
   /**
    * Pin content to ensure persistence
-   * @param {string} cid - The IPFS CID to pin
-   * @returns {Promise<boolean>} - Success status
+   * @param cid - The IPFS CID to pin
+   * @returns Success status
    */
-  async pinContent(cid) {
+  async pinContent(cid: string): Promise<boolean> {
     // TODO: Implement content pinning
     throw new Error("Not implemented yet");
   }
