@@ -1,0 +1,14 @@
+{
+  "contractName": "VideoGuard",
+  "address": "REPLACE_WITH_DEPLOYED_ADDRESS",
+  "network": "mumbai",
+  "chainId": 80001,
+  "abi": [
+    {
+      "_comment": "PERSON 4: Replace this with actual contract ABI after deployment"
+    }
+  ],
+  "deploymentDate": "",
+  "deployer": "",
+  "transactionHash": ""
+}
