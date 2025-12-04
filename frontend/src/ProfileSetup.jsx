@@ -20,8 +20,10 @@ function ProfileSetup() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    // Check if user is authenticated
-    if (!auth.currentUser) {
+    // Check if user is authenticated (either Firebase Auth or wallet login)
+    const walletLoginActive = localStorage.getItem('walletLoginActive');
+    
+    if (!auth.currentUser && walletLoginActive !== 'true') {
       navigate("/login");
     }
   }, [navigate]);
