@@ -126,10 +126,26 @@ function Login() {
 
       // Check if wallet is linked to an account
       const result = await firestoreOperations.getUserByWallet(walletAddress);
+      console.log('getUserByWallet result:', result);
 
       if (result.success) {
         // Wallet is linked, check if user has email set
         const userData = result.data;
+        console.log('User data from wallet:', userData);
+        
+        // Store wallet login session in localStorage (no Firebase Auth needed)
+        localStorage.setItem('walletLoginUserId', userData.id);
+        localStorage.setItem('walletAddress', walletAddress);
+        localStorage.setItem('walletLoginActive', 'true');
+        if (userData.email) {
+          localStorage.setItem('walletLoginEmail', userData.email);
+        }
+        
+        console.log('Wallet session created:');
+        console.log('  - userId:', userData.id);
+        console.log('  - walletAddress:', walletAddress);
+        console.log('  - email:', userData.email);
+        console.log('  - profileComplete:', userData.profileComplete);
         
         if (!userData.email) {
           // User hasn't set email yet, prompt them
@@ -142,6 +158,7 @@ function Login() {
             await firestoreOperations.updateUser(userData.id, {
               email: userEmail,
             });
+            localStorage.setItem('walletLoginEmail', userEmail);
             
             // Check if profile is complete
             if (userData.profileComplete) {
