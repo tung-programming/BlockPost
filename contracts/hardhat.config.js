@@ -2,7 +2,7 @@ require("@nomicfoundation/hardhat-toolbox");
 require("dotenv").config({ path: "../.env" });
 
 /**
- * Hardhat configuration for VideoGuard contract on Polygon Mumbai
+ * Hardhat configuration for VideoGuard contract on Polygon Amoy Testnet
  * PERSON 4: Optimized for gas efficiency (<100k per tx)
  */
 
@@ -22,6 +22,13 @@ module.exports = {
     hardhat: {
       chainId: 31337,
     },
+    amoy: {
+      url: process.env.RPC_URL || "https://rpc-amoy.polygon.technology/",
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+      chainId: 80002,
+      gasPrice: "auto",
+      gas: 6000000, // Gas limit
+    },
     mumbai: {
       url: process.env.MUMBAI_RPC_URL || process.env.POLYGON_RPC || "https://rpc-mumbai.maticvigil.com",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
@@ -37,6 +44,7 @@ module.exports = {
   },
   etherscan: {
     apiKey: {
+      polygonAmoy: process.env.POLYGONSCAN_API_KEY || "",
       polygonMumbai: process.env.POLYGONSCAN_API_KEY || "",
       polygon: process.env.POLYGONSCAN_API_KEY || "",
     },
