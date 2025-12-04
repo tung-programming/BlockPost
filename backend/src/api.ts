@@ -17,7 +17,8 @@ import multer, { MulterError } from 'multer';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import HashEngine from './hash-engine.js';
+import { computeHashes } from './hash-engine.js';
+import { pinToIpfs } from './ipfs-storage.js';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -143,46 +144,88 @@ app.post('/upload', upload.single('video'), async (req: Request, res: Response):
     }
 
     // Log upload details
-    console.log('[UPLOAD] Video file received:');
+    console.log('[UPLOAD] Asset file received:');
     console.log(`  - Original name: ${req.file.originalname}`);
     console.log(`  - MIME type: ${req.file.mimetype}`);
     console.log(`  - Size: ${(req.file.size / (1024 * 1024)).toFixed(2)} MB`);
     console.log(`  - Buffer length: ${req.file.buffer.length} bytes`);
 
-    // PHASE 2: Generate all hashes using 3-layer detection
-    console.log('[UPLOAD] Starting hash generation...');
+    // PHASE 2: Generate all hashes using multi-asset detection
+    console.log('[UPLOAD] Starting multi-asset hash generation...');
     const hashStartTime = Date.now();
     
-    const hashes = await HashEngine.generateAllHashes(req.file.buffer);
+    const hashResult = await computeHashes(req.file.buffer, req.file.mimetype);
     
     const hashDuration = Date.now() - hashStartTime;
     console.log(`[UPLOAD] ✓ Hash generation completed in ${hashDuration}ms`);
+    console.log(`[UPLOAD] Asset Type: ${hashResult.assetType}`);
 
-    // Extract file information with hashes
+    // PHASE 3: Pin to IPFS via Pinata
+    console.log('[UPLOAD] Starting IPFS pinning...');
+    const ipfsStartTime = Date.now();
+    
+    const ipfsResult = await pinToIpfs(
+      req.file.buffer,
+      req.file.originalname,
+      req.file.mimetype,
+      {
+        assetType: hashResult.assetType,
+        exactHash: hashResult.exactHash,
+        uploadedAt: new Date().toISOString()
+      }
+    );
+    
+    const ipfsDuration = Date.now() - ipfsStartTime;
+    console.log(`[UPLOAD] ✓ IPFS pinning completed in ${ipfsDuration}ms`);
+
+    // Log blockchain registration data (not actually sent yet)
+    console.log('\n[BLOCKCHAIN] Would register on Polygon with:');
+    console.log(JSON.stringify({
+      action: 'REGISTER_ASSET',
+      exactHash: hashResult.exactHash,
+      perceptualHash: hashResult.perceptualHash,
+      audioHash: hashResult.audioHash,
+      ipfsCid: ipfsResult.cid,
+      assetType: hashResult.assetType
+    }, null, 2));
+    console.log('[BLOCKCHAIN] (Actual contract call will be implemented in next phase)\n');
+
+    // Extract file information with all data
     const fileInfo = {
       originalName: req.file.originalname,
       mimeType: req.file.mimetype,
       size: req.file.size,
       sizeInMB: (req.file.size / (1024 * 1024)).toFixed(2),
-      uploadedAt: new Date().toISOString(),
-      hashes: {
-        exactHash: hashes.exactHash,
-        perceptualHash: hashes.perceptualHash,
-        audioHash: hashes.audioHash
-      },
-      processingTime: `${hashDuration}ms`
+      uploadedAt: new Date().toISOString()
     };
 
-    // Log successful upload with hash summary
-    console.log('[UPLOAD] ✓ Video processed successfully with 3-layer hashing');
-    console.log(`[UPLOAD] Exact Hash: ${hashes.exactHash.substring(0, 16)}...`);
-    console.log(`[UPLOAD] Perceptual Hash: ${hashes.perceptualHash.substring(0, 16)}...`);
+    const totalDuration = hashDuration + ipfsDuration;
+    console.log(`[UPLOAD] ✓ Asset processed successfully!`);
+    console.log(`[UPLOAD] Total processing time: ${totalDuration}ms`);
+    console.log(`[UPLOAD] Exact Hash: ${hashResult.exactHash.substring(0, 16)}...`);
+    console.log(`[UPLOAD] Perceptual Hash: ${hashResult.perceptualHash.substring(0, 16)}...`);
+    console.log(`[UPLOAD] IPFS CID: ${ipfsResult.cid}\n`);
 
-    // Return success response with all hash data
+    // Return success response with all data
     res.json({
       success: true,
-      message: 'Video uploaded and hashed successfully',
-      fileInfo: fileInfo
+      message: 'Asset uploaded, hashed, and pinned to IPFS successfully',
+      assetType: hashResult.assetType,
+      fileInfo: fileInfo,
+      hashes: {
+        exactHash: hashResult.exactHash,
+        perceptualHash: hashResult.perceptualHash,
+        audioHash: hashResult.audioHash
+      },
+      ipfs: {
+        cid: ipfsResult.cid,
+        gatewayUrl: ipfsResult.gatewayUrl
+      },
+      processingTime: {
+        hashing: `${hashDuration}ms`,
+        ipfs: `${ipfsDuration}ms`,
+        total: `${totalDuration}ms`
+      }
     });
 
   } catch (error) {
