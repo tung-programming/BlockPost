@@ -26,6 +26,31 @@ dotenv.config();
 // Initialize Express application
 const app: Application = express();
 
+// ============ IN-MEMORY STORAGE ============
+/**
+ * In-memory posts storage
+ * In production, this would be replaced with a blockchain smart contract
+ * or decentralized database. For MVP, we store post metadata in memory.
+ */
+interface Post {
+  id: string;
+  ipfsCid: string;
+  gatewayUrl: string;
+  walletAddress: string;
+  caption?: string;
+  exactHash: string;
+  perceptualHash: string;
+  audioHash: string | null;
+  assetType: string;
+  mimeType: string;
+  fileName: string;
+  fileSize: number;
+  status: 'ORIGINAL' | 'EXACT_DUPLICATE' | 'VISUAL_MATCH' | 'AUDIO_MATCH';
+  timestamp: string;
+}
+
+const posts: Post[] = [];
+
 // ============ MIDDLEWARE CONFIGURATION ============
 
 /**
@@ -150,6 +175,40 @@ app.get('/health', (req: Request, res: Response): void => {
 });
 
 /**
+ * Get All Posts Endpoint
+ * GET /posts
+ * 
+ * Returns all posts sorted by timestamp (newest first)
+ * Each post contains IPFS CID and metadata
+ * 
+ * Response:
+ * - Success: { success: true, posts: [...] }
+ * - Error: { success: false, error: "Error message" }
+ */
+app.get('/posts', (req: Request, res: Response): void => {
+  try {
+    // Sort posts by timestamp (newest first)
+    const sortedPosts = [...posts].sort((a, b) => 
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+
+    console.log(`[GET POSTS] Returning ${sortedPosts.length} posts`);
+
+    res.json({
+      success: true,
+      count: sortedPosts.length,
+      posts: sortedPosts
+    });
+  } catch (error) {
+    console.error('[GET POSTS ERROR]', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch posts'
+    });
+  }
+});
+
+/**
  * Video Upload Endpoint
  * POST /upload
  * 
@@ -240,10 +299,51 @@ app.post('/upload', upload.single('video'), async (req: Request, res: Response):
     console.log(`[UPLOAD] Perceptual Hash: ${hashResult.perceptualHash.substring(0, 16)}...`);
     console.log(`[UPLOAD] IPFS CID: ${ipfsResult.cid}\n`);
 
+    // Check for duplicate content
+    let status: 'ORIGINAL' | 'EXACT_DUPLICATE' | 'VISUAL_MATCH' | 'AUDIO_MATCH' = 'ORIGINAL';
+    
+    for (const existingPost of posts) {
+      if (existingPost.exactHash === hashResult.exactHash) {
+        status = 'EXACT_DUPLICATE';
+        break;
+      }
+      if (hashResult.perceptualHash && existingPost.perceptualHash === hashResult.perceptualHash) {
+        status = 'VISUAL_MATCH';
+        break;
+      }
+      if (hashResult.audioHash && existingPost.audioHash === hashResult.audioHash) {
+        status = 'AUDIO_MATCH';
+        break;
+      }
+    }
+
+    // Store post in memory
+    const newPost: Post = {
+      id: Date.now().toString(),
+      ipfsCid: ipfsResult.cid,
+      gatewayUrl: ipfsResult.gatewayUrl,
+      walletAddress: req.body.walletAddress || 'anonymous',
+      caption: req.body.caption || '',
+      exactHash: hashResult.exactHash,
+      perceptualHash: hashResult.perceptualHash,
+      audioHash: hashResult.audioHash,
+      assetType: hashResult.assetType,
+      mimeType: req.file.mimetype,
+      fileName: req.file.originalname,
+      fileSize: req.file.size,
+      status: status,
+      timestamp: new Date().toISOString()
+    };
+
+    posts.push(newPost);
+    console.log(`[UPLOAD] ✓ Post stored with status: ${status}`);
+    console.log(`[UPLOAD] Total posts in memory: ${posts.length}\n`);
+
     // Return success response with all data
     res.json({
       success: true,
       message: 'Asset uploaded, hashed, and pinned to IPFS successfully',
+      post: newPost,
       assetType: hashResult.assetType,
       fileInfo: fileInfo,
       hashes: {
@@ -255,6 +355,7 @@ app.post('/upload', upload.single('video'), async (req: Request, res: Response):
         cid: ipfsResult.cid,
         gatewayUrl: ipfsResult.gatewayUrl
       },
+      status: status,
       processingTime: {
         hashing: `${hashDuration}ms`,
         ipfs: `${ipfsDuration}ms`,
