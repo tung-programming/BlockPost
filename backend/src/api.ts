@@ -62,26 +62,60 @@ const storage = multer.memoryStorage();
 
 /**
  * File Filter Function
- * Validates that uploaded files are video formats
- * Accepts common video MIME types
+ * Validates uploaded files for multi-asset support
+ * Accepts: video, image, audio, and other file types
  */
 const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback): void => {
-  // Allowed video MIME types
+  // Supported asset types
   const allowedMimeTypes: string[] = [
+    // Video formats
     'video/mp4',
     'video/mpeg',
     'video/quicktime',
     'video/x-msvideo',
     'video/x-matroska',
-    'video/webm'
+    'video/webm',
+    'video/x-flv',
+    
+    // Image formats
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'image/svg+xml',
+    'image/bmp',
+    
+    // Audio formats
+    'audio/mpeg',
+    'audio/wav',
+    'audio/ogg',
+    'audio/webm',
+    'audio/aac',
+    'audio/flac',
+    
+    // Document/Other formats
+    'application/pdf',
+    'text/plain',
+    'application/json',
+    'application/zip',
+    'application/x-rar-compressed'
   ];
 
-  if (allowedMimeTypes.includes(file.mimetype)) {
+  // Check if MIME type is in allowed list OR starts with video/image/audio
+  const isAllowed = 
+    allowedMimeTypes.includes(file.mimetype) ||
+    file.mimetype.startsWith('video/') ||
+    file.mimetype.startsWith('image/') ||
+    file.mimetype.startsWith('audio/') ||
+    file.mimetype.startsWith('text/') ||
+    file.mimetype.startsWith('application/');
+
+  if (isAllowed) {
     // Accept the file
     cb(null, true);
   } else {
     // Reject the file
-    cb(new Error('Invalid file type. Only video files are allowed.'));
+    cb(new Error(`Invalid file type: ${file.mimetype}. Please upload a valid video, image, audio, or document file.`));
   }
 };
 
