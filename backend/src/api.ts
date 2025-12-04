@@ -17,6 +17,7 @@ import multer, { MulterError } from 'multer';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import HashEngine from './hash-engine.js';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -148,24 +149,39 @@ app.post('/upload', upload.single('video'), async (req: Request, res: Response):
     console.log(`  - Size: ${(req.file.size / (1024 * 1024)).toFixed(2)} MB`);
     console.log(`  - Buffer length: ${req.file.buffer.length} bytes`);
 
-    // Extract file information
+    // PHASE 2: Generate all hashes using 3-layer detection
+    console.log('[UPLOAD] Starting hash generation...');
+    const hashStartTime = Date.now();
+    
+    const hashes = await HashEngine.generateAllHashes(req.file.buffer);
+    
+    const hashDuration = Date.now() - hashStartTime;
+    console.log(`[UPLOAD] ✓ Hash generation completed in ${hashDuration}ms`);
+
+    // Extract file information with hashes
     const fileInfo = {
       originalName: req.file.originalname,
       mimeType: req.file.mimetype,
       size: req.file.size,
       sizeInMB: (req.file.size / (1024 * 1024)).toFixed(2),
-      uploadedAt: new Date().toISOString()
+      uploadedAt: new Date().toISOString(),
+      hashes: {
+        exactHash: hashes.exactHash,
+        perceptualHash: hashes.perceptualHash,
+        audioHash: hashes.audioHash
+      },
+      processingTime: `${hashDuration}ms`
     };
 
-    // Log successful upload
-    console.log('[UPLOAD] File processed successfully');
+    // Log successful upload with hash summary
+    console.log('[UPLOAD] ✓ Video processed successfully with 3-layer hashing');
+    console.log(`[UPLOAD] Exact Hash: ${hashes.exactHash.substring(0, 16)}...`);
+    console.log(`[UPLOAD] Perceptual Hash: ${hashes.perceptualHash.substring(0, 16)}...`);
 
-    // Return success response
-    // Note: File is currently in memory (req.file.buffer)
-    // In next steps, this will be hashed and uploaded to IPFS
+    // Return success response with all hash data
     res.json({
       success: true,
-      message: 'Video uploaded successfully',
+      message: 'Video uploaded and hashed successfully',
       fileInfo: fileInfo
     });
 
