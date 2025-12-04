@@ -1,4 +1,9 @@
-import { Link, NavLink } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, NavLink, useNavigate } from "react-router-dom";
+import { signOut } from "firebase/auth";
+import { auth } from "./firebase/config";
+import { firestoreOperations } from "./firebase/firestoreRefs";
+import { ethers } from "ethers";
 
 // TODO: Replace dummyPosts with data from backend API:
 // GET `${import.meta.env.VITE_API_BASE_URL}/posts`
@@ -45,6 +50,126 @@ const dummyPosts = [
 ];
 
 function Feed() {
+  const navigate = useNavigate();
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [userData, setUserData] = useState(null);
+  const [connectingWallet, setConnectingWallet] = useState(false);
+  const [walletError, setWalletError] = useState("");
+
+  useEffect(() => {
+    // Fetch user data to check wallet link status
+    fetchUserData();
+  }, []);
+
+  const fetchUserData = async () => {
+    try {
+      const walletLoginActive = localStorage.getItem('walletLoginActive');
+      const walletLoginUserId = localStorage.getItem('walletLoginUserId');
+      
+      let userId;
+      
+      if (walletLoginActive === 'true' && walletLoginUserId) {
+        userId = walletLoginUserId;
+      } else if (auth.currentUser) {
+        userId = auth.currentUser.uid;
+      } else {
+        return;
+      }
+
+      const result = await firestoreOperations.getUser(userId);
+      
+      if (result.success) {
+        setUserData({ id: userId, ...result.data });
+      }
+    } catch (error) {
+      console.error("Error fetching user data:", error);
+    }
+  };
+
+  const handleConnectWallet = async () => {
+    setConnectingWallet(true);
+    setWalletError("");
+
+    try {
+      if (!window.ethereum) {
+        setWalletError("MetaMask is not installed");
+        setConnectingWallet(false);
+        return;
+      }
+
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const accounts = await provider.send("eth_requestAccounts", []);
+      const walletAddress = accounts[0];
+
+      const walletLoginActive = localStorage.getItem('walletLoginActive');
+      const walletLoginUserId = localStorage.getItem('walletLoginUserId');
+      const walletLoginEmail = localStorage.getItem('walletLoginEmail');
+      
+      let userId, userEmail;
+      
+      if (walletLoginActive === 'true' && walletLoginUserId) {
+        userId = walletLoginUserId;
+        userEmail = walletLoginEmail || userData?.email;
+      } else if (auth.currentUser) {
+        userId = auth.currentUser.uid;
+        userEmail = auth.currentUser.email || userData?.email;
+      } else {
+        setWalletError("No active session");
+        setConnectingWallet(false);
+        return;
+      }
+
+      const isLinked = await firestoreOperations.isWalletLinked(walletAddress);
+      
+      if (isLinked) {
+        const result = await firestoreOperations.getUserByWallet(walletAddress);
+        if (result.success && result.data.id !== userId) {
+          setWalletError("Wallet linked to another account");
+          setConnectingWallet(false);
+          return;
+        }
+      }
+
+      await firestoreOperations.linkWallet(walletAddress, userId, userEmail);
+      await fetchUserData();
+      
+      // Clear error after 3 seconds if success
+      setTimeout(() => setWalletError(""), 3000);
+    } catch (error) {
+      console.error("Wallet connection error:", error);
+      setWalletError("Failed to connect wallet");
+    } finally {
+      setConnectingWallet(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      // Check if this is a wallet login or Firebase Auth login
+      const walletLoginActive = localStorage.getItem('walletLoginActive');
+      
+      if (walletLoginActive === 'true') {
+        // Wallet login - just clear localStorage
+        localStorage.removeItem('walletLoginUserId');
+        localStorage.removeItem('walletAddress');
+        localStorage.removeItem('walletLoginEmail');
+        localStorage.removeItem('walletLoginActive');
+      } else {
+        // Firebase Auth login - sign out properly
+        await signOut(auth);
+      }
+      
+      console.log("User logged out");
+      navigate("/");
+    } catch (error) {
+      console.error("Logout error:", error);
+      alert("Failed to logout. Please try again.");
+    } finally {
+      setLoggingOut(false);
+    }
+  };
+
   const getStatusBadge = (status) => {
     const badges = {
       ORIGINAL: "bg-green-600/20 text-green-400 border-green-600",
@@ -124,9 +249,27 @@ function Feed() {
           </a>
         </nav>
 
-        <div className="mt-auto pt-4 border-t border-slate-800">
-          <button className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg font-semibold transition-colors text-sm">
-            Connect Wallet
+        <div className="mt-auto pt-4 border-t border-slate-800 space-y-3">
+          {userData && !userData.walletLinked && (
+            <button
+              onClick={handleConnectWallet}
+              disabled={connectingWallet}
+              className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-700 disabled:cursor-not-allowed rounded-lg font-semibold transition-colors text-sm flex items-center justify-center gap-2"
+            >
+              <span className="text-lg">🦊</span>
+              {connectingWallet ? "Connecting..." : "Connect Wallet"}
+            </button>
+          )}
+          {walletError && (
+            <p className="text-xs text-red-400 text-center">{walletError}</p>
+          )}
+          <button
+            onClick={handleLogout}
+            disabled={loggingOut}
+            className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-slate-700 disabled:cursor-not-allowed rounded-lg font-semibold transition-colors text-sm flex items-center justify-center gap-2"
+          >
+            <span className="text-lg">🚪</span>
+            {loggingOut ? "Logging out..." : "Logout"}
           </button>
         </div>
       </aside>

@@ -22,8 +22,18 @@ function Profile() {
   const [success, setSuccess] = useState("");
 
   useEffect(() => {
-    // Check if user is authenticated
-    if (!auth.currentUser) {
+    // Check if user is authenticated (either Firebase Auth or wallet login)
+    const walletLoginActive = localStorage.getItem('walletLoginActive');
+    const walletLoginUserId = localStorage.getItem('walletLoginUserId');
+    
+    if (!auth.currentUser && walletLoginActive !== 'true') {
+      navigate("/login");
+      return;
+    }
+    
+    if (walletLoginActive === 'true' && !walletLoginUserId) {
+      // Invalid wallet session
+      localStorage.clear();
       navigate("/login");
       return;
     }
@@ -34,19 +44,42 @@ function Profile() {
 
   const fetchUserData = async () => {
     try {
-      const user = auth.currentUser;
-      if (!user) return;
+      // Check if this is a wallet-based login
+      const walletLoginUserId = localStorage.getItem('walletLoginUserId');
+      const walletLoginActive = localStorage.getItem('walletLoginActive');
+      
+      let userId;
+      
+      if (walletLoginActive === 'true' && walletLoginUserId) {
+        // Wallet login - use userId from localStorage
+        userId = walletLoginUserId;
+        console.log('Fetching profile for wallet login, userId:', userId);
+      } else if (auth.currentUser) {
+        // Firebase Auth login - use currentUser.uid
+        userId = auth.currentUser.uid;
+        console.log('Fetching profile for Firebase Auth login, userId:', userId);
+      } else {
+        // No valid session
+        console.error('No valid session found');
+        setError("No active session found");
+        setLoading(false);
+        return;
+      }
 
-      const result = await firestoreOperations.getUser(user.uid);
+      console.log('Calling firestoreOperations.getUser with userId:', userId);
+      const result = await firestoreOperations.getUser(userId);
+      console.log('Firestore result:', result);
       
       if (result.success) {
-        setUserData({ id: user.uid, ...result.data });
+        setUserData({ id: userId, ...result.data });
         setEditFormData({
           displayName: result.data.displayName || "",
           bio: result.data.bio || "",
           dob: result.data.dob || "",
         });
+        console.log('Profile data loaded successfully');
       } else {
+        console.error('Failed to load profile data:', result.error);
         setError("Failed to load profile data");
       }
     } catch (error) {
@@ -75,13 +108,32 @@ function Profile() {
       const accounts = await provider.send("eth_requestAccounts", []);
       const walletAddress = accounts[0];
 
+      // Get userId based on login type
+      const walletLoginActive = localStorage.getItem('walletLoginActive');
+      const walletLoginUserId = localStorage.getItem('walletLoginUserId');
+      const walletLoginEmail = localStorage.getItem('walletLoginEmail');
+      
+      let userId, userEmail;
+      
+      if (walletLoginActive === 'true' && walletLoginUserId) {
+        userId = walletLoginUserId;
+        userEmail = walletLoginEmail || userData.email;
+      } else if (auth.currentUser) {
+        userId = auth.currentUser.uid;
+        userEmail = auth.currentUser.email || userData.email;
+      } else {
+        setError("No active session found");
+        setConnectingWallet(false);
+        return;
+      }
+
       // Check if wallet is already linked to another account
       const isLinked = await firestoreOperations.isWalletLinked(walletAddress);
       
       if (isLinked) {
         // Check if it's linked to this user
         const result = await firestoreOperations.getUserByWallet(walletAddress);
-        if (result.success && result.data.id !== auth.currentUser.uid) {
+        if (result.success && result.data.id !== userId) {
           setError("This wallet is already linked to another account.");
           setConnectingWallet(false);
           return;
@@ -91,8 +143,8 @@ function Profile() {
       // Link wallet to user
       await firestoreOperations.linkWallet(
         walletAddress,
-        auth.currentUser.uid,
-        auth.currentUser.email
+        userId,
+        userEmail
       );
 
       setSuccess("Wallet connected successfully!");
@@ -134,18 +186,33 @@ function Profile() {
     setSuccess("");
 
     try {
-      const user = auth.currentUser;
+      // Get userId based on login type
+      const walletLoginActive = localStorage.getItem('walletLoginActive');
+      const walletLoginUserId = localStorage.getItem('walletLoginUserId');
+      
+      let userId;
+      
+      if (walletLoginActive === 'true' && walletLoginUserId) {
+        userId = walletLoginUserId;
+      } else if (auth.currentUser) {
+        userId = auth.currentUser.uid;
+      } else {
+        setError("No active session found");
+        setLoading(false);
+        return;
+      }
+      
       let profilePicUrl = userData.profilePicUrl || "";
 
       // Upload new profile picture if changed
       if (profilePic) {
-        const storageRef = ref(storage, `profilePics/${user.uid}`);
+        const storageRef = ref(storage, `profilePics/${userId}`);
         await uploadBytes(storageRef, profilePic);
         profilePicUrl = await getDownloadURL(storageRef);
       }
 
       // Update user document
-      await firestoreOperations.updateUser(user.uid, {
+      await firestoreOperations.updateUser(userId, {
         displayName: editFormData.displayName,
         bio: editFormData.bio,
         dob: editFormData.dob,
