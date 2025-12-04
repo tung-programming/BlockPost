@@ -1,4 +1,7 @@
-import { Link, NavLink } from "react-router-dom";
+import { useState } from "react";
+import { Link, NavLink, useNavigate } from "react-router-dom";
+import { signOut } from "firebase/auth";
+import { auth } from "./firebase/config";
 
 // TODO: Replace dummyPosts with data from backend API:
 // GET `${import.meta.env.VITE_API_BASE_URL}/posts`
@@ -45,6 +48,23 @@ const dummyPosts = [
 ];
 
 function Feed() {
+  const navigate = useNavigate();
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await signOut(auth);
+      console.log("User logged out");
+      navigate("/");
+    } catch (error) {
+      console.error("Logout error:", error);
+      alert("Failed to logout. Please try again.");
+    } finally {
+      setLoggingOut(false);
+    }
+  };
+
   const getStatusBadge = (status) => {
     const badges = {
       ORIGINAL: "bg-green-600/20 text-green-400 border-green-600",
@@ -124,9 +144,17 @@ function Feed() {
           </a>
         </nav>
 
-        <div className="mt-auto pt-4 border-t border-slate-800">
+        <div className="mt-auto pt-4 border-t border-slate-800 space-y-3">
           <button className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg font-semibold transition-colors text-sm">
             Connect Wallet
+          </button>
+          <button
+            onClick={handleLogout}
+            disabled={loggingOut}
+            className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-slate-700 disabled:cursor-not-allowed rounded-lg font-semibold transition-colors text-sm flex items-center justify-center gap-2"
+          >
+            <span className="text-lg">🚪</span>
+            {loggingOut ? "Logging out..." : "Logout"}
           </button>
         </div>
       </aside>

@@ -36,7 +36,15 @@ function Login() {
       );
       
       console.log("User logged in:", userCredential.user.uid);
-      navigate("/feed");
+      
+      // Check if user has completed profile setup
+      const userResult = await firestoreOperations.getUser(userCredential.user.uid);
+      
+      if (userResult.success && userResult.data.profileComplete) {
+        navigate("/feed");
+      } else {
+        navigate("/profile-setup");
+      }
     } catch (error) {
       console.error("Login error:", error);
       setError(getErrorMessage(error.code));
@@ -55,7 +63,27 @@ function Login() {
       const result = await signInWithPopup(auth, provider);
       
       console.log("Google login successful:", result.user.uid);
-      navigate("/feed");
+      
+      // Check if user exists in Firestore
+      const userResult = await firestoreOperations.getUser(result.user.uid);
+      
+      if (userResult.success) {
+        // User exists, check if profile is complete
+        if (userResult.data.profileComplete) {
+          navigate("/feed");
+        } else {
+          navigate("/profile-setup");
+        }
+      } else {
+        // New Google user - create user document and go to profile setup
+        await firestoreOperations.setUser(result.user.uid, {
+          email: result.user.email,
+          createdAt: new Date().toISOString(),
+          profileComplete: false,
+          walletLinked: false,
+        });
+        navigate("/profile-setup");
+      }
     } catch (error) {
       console.error("Google login error:", error);
       setError(getErrorMessage(error.code));
@@ -102,13 +130,23 @@ function Login() {
             await firestoreOperations.updateUser(userData.id, {
               email: userEmail,
             });
-            navigate("/feed");
+            
+            // Check if profile is complete
+            if (userData.profileComplete) {
+              navigate("/feed");
+            } else {
+              navigate("/profile-setup");
+            }
           } else {
             setError("Email is required to proceed.");
           }
         } else {
-          // User has email, proceed to feed
-          navigate("/feed");
+          // User has email, check profile completion
+          if (userData.profileComplete) {
+            navigate("/feed");
+          } else {
+            navigate("/profile-setup");
+          }
         }
       } else {
         // Wallet not linked to any account
