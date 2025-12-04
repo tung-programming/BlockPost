@@ -226,7 +226,7 @@ class HashEngine {
    * @param buffer - The video file buffer
    * @returns Audio fingerprint string
    */
-  static async generateAudioFingerprint(buffer: Buffer): Promise<string> {
+  static async generateAudioFingerprint(_buffer: Buffer): Promise<string> {
     // TODO: Implement Chromaprint audio fingerprinting
     // For now, return a placeholder to maintain API consistency
     console.log('[HASH ENGINE] Audio fingerprint generation - placeholder');

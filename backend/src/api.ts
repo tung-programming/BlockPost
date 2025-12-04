@@ -15,8 +15,6 @@ import express, { Request, Response, NextFunction, Application } from 'express';
 import cors from 'cors';
 import multer, { MulterError } from 'multer';
 import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { computeHashes } from './hash-engine.js';
 import { pinToIpfs } from './ipfs-storage.js';
 
@@ -90,7 +88,7 @@ const storage = multer.memoryStorage();
  * Validates uploaded files for multi-asset support
  * Accepts: video, image, audio, and other file types
  */
-const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback): void => {
+const fileFilter = (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback): void => {
   // Supported asset types
   const allowedMimeTypes: string[] = [
     // Video formats
@@ -166,7 +164,7 @@ const upload = multer({
  * GET /health
  * Returns server status
  */
-app.get('/health', (req: Request, res: Response): void => {
+app.get('/health', (_req: Request, res: Response): void => {
   res.json({ 
     status: 'ok', 
     message: 'VideoGuard Backend API is running',
@@ -391,7 +389,7 @@ app.use('*', (req: Request, res: Response): void => {
  * Global Error Handler
  * Catches all errors that occur in the application
  */
-app.use((error: Error, req: Request, res: Response, next: NextFunction): void => {
+app.use((error: Error, _req: Request, res: Response, _next: NextFunction): void => {
   console.error('[SERVER ERROR]', error);
   
   // Handle multer errors
