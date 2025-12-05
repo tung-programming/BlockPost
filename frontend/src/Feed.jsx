@@ -5,6 +5,7 @@ import { auth } from "./firebase/config";
 import { firestoreOperations } from "./firebase/firestoreRefs";
 import { ethers } from "ethers";
 import axios from "axios";
+import CreatePost from "./CreatePost";
 
 function Feed() {
   const navigate = useNavigate();
@@ -15,6 +16,7 @@ function Feed() {
   const [posts, setPosts] = useState([]);
   const [loadingPosts, setLoadingPosts] = useState(true);
   const [postsError, setPostsError] = useState("");
+  const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
 
   useEffect(() => {
     // Fetch user data to check wallet link status
@@ -220,7 +222,10 @@ function Feed() {
             <span className="font-medium">Home</span>
           </NavLink>
 
-          <button className="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 transition-colors w-full text-left">
+          <button 
+            onClick={() => setIsCreatePostOpen(true)}
+            className="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 transition-colors w-full text-left"
+          >
             <span className="text-xl">✍️</span>
             <span className="font-medium">Post</span>
           </button>
@@ -451,6 +456,13 @@ function Feed() {
           </div>
         </aside>
       </div>
+
+      {/* Create Post Modal */}
+      <CreatePost
+        isOpen={isCreatePostOpen}
+        onClose={() => setIsCreatePostOpen(false)}
+        onPostCreated={fetchPosts}
+      />
     </div>
   );
 }
