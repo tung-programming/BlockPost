@@ -33,9 +33,12 @@ const app: Application = express();
 interface Post {
   id: string;
   ipfsCid: string;
+  metadataCid: string;
   gatewayUrl: string;
+  metadataUrl: string;
   walletAddress: string;
-  caption?: string;
+  title?: string;
+  description?: string;
   exactHash: string;
   perceptualHash: string;
   audioHash: string | null;
@@ -269,6 +272,50 @@ app.post('/upload', upload.single('video'), async (req: Request, res: Response):
     const ipfsDuration = Date.now() - ipfsStartTime;
     console.log(`[UPLOAD] ✓ IPFS pinning completed in ${ipfsDuration}ms`);
 
+    // PHASE 4: Create and pin metadata JSON
+    console.log('[UPLOAD] Creating metadata JSON...');
+    const metadataStartTime = Date.now();
+    
+    const createdAt = new Date().toISOString();
+    
+    const metadata = {
+      assetType: hashResult.assetType,
+      author: req.body.walletAddress || 'anonymous',
+      createdAt: createdAt,
+      title: req.body.title || req.file.originalname,
+      description: req.body.description || req.body.caption || '',
+      hashes: {
+        exactHash: hashResult.exactHash,
+        perceptualHash: hashResult.perceptualHash || (hashResult.assetType === 'audio' || hashResult.assetType === 'text' ? 'no_video' : ''),
+        audioHash: hashResult.audioHash || (hashResult.assetType === 'image' || hashResult.assetType === 'text' ? 'no_audio' : '')
+      },
+      media: {
+        originalName: req.file.originalname,
+        mimeType: req.file.mimetype,
+        sizeInMB: parseFloat((req.file.size / (1024 * 1024)).toFixed(2)),
+        cid: ipfsResult.cid,
+        gatewayUrl: ipfsResult.gatewayUrl
+      }
+    };
+
+    // Pin metadata JSON to IPFS
+    const metadataBuffer = Buffer.from(JSON.stringify(metadata, null, 2));
+    const metadataResult = await pinToIpfs(
+      metadataBuffer,
+      `metadata_${req.file.originalname}.json`,
+      'application/json',
+      {
+        assetType: 'metadata',
+        relatedAssetCid: ipfsResult.cid,
+        author: req.body.walletAddress || 'anonymous',
+        uploadedAt: createdAt
+      }
+    );
+
+    const metadataDuration = Date.now() - metadataStartTime;
+    console.log(`[UPLOAD] ✓ Metadata JSON pinned in ${metadataDuration}ms`);
+    console.log(`[UPLOAD] Metadata CID: ${metadataResult.cid}`);
+
     // Log blockchain registration data (not actually sent yet)
     console.log('\n[BLOCKCHAIN] Would register on Polygon with:');
     console.log(JSON.stringify({
@@ -277,6 +324,7 @@ app.post('/upload', upload.single('video'), async (req: Request, res: Response):
       perceptualHash: hashResult.perceptualHash,
       audioHash: hashResult.audioHash,
       ipfsCid: ipfsResult.cid,
+      metadataCid: metadataResult.cid,
       assetType: hashResult.assetType
     }, null, 2));
     console.log('[BLOCKCHAIN] (Actual contract call will be implemented in next phase)\n');
@@ -290,7 +338,7 @@ app.post('/upload', upload.single('video'), async (req: Request, res: Response):
       uploadedAt: new Date().toISOString()
     };
 
-    const totalDuration = hashDuration + ipfsDuration;
+    const totalDuration = hashDuration + ipfsDuration + metadataDuration;
     console.log(`[UPLOAD] ✓ Asset processed successfully!`);
     console.log(`[UPLOAD] Total processing time: ${totalDuration}ms`);
     console.log(`[UPLOAD] Exact Hash: ${hashResult.exactHash.substring(0, 16)}...`);
@@ -319,9 +367,12 @@ app.post('/upload', upload.single('video'), async (req: Request, res: Response):
     const newPost: Post = {
       id: Date.now().toString(),
       ipfsCid: ipfsResult.cid,
+      metadataCid: metadataResult.cid,
       gatewayUrl: ipfsResult.gatewayUrl,
+      metadataUrl: metadataResult.gatewayUrl,
       walletAddress: req.body.walletAddress || 'anonymous',
-      caption: req.body.caption || '',
+      title: req.body.title || req.file.originalname,
+      description: req.body.description || '',
       exactHash: hashResult.exactHash,
       perceptualHash: hashResult.perceptualHash,
       audioHash: hashResult.audioHash,
@@ -330,7 +381,7 @@ app.post('/upload', upload.single('video'), async (req: Request, res: Response):
       fileName: req.file.originalname,
       fileSize: req.file.size,
       status: status,
-      timestamp: new Date().toISOString()
+      timestamp: createdAt
     };
 
     posts.push(newPost);
@@ -342,6 +393,7 @@ app.post('/upload', upload.single('video'), async (req: Request, res: Response):
       success: true,
       message: 'Asset uploaded, hashed, and pinned to IPFS successfully',
       post: newPost,
+      metadata: metadata,
       assetType: hashResult.assetType,
       fileInfo: fileInfo,
       hashes: {
@@ -351,12 +403,15 @@ app.post('/upload', upload.single('video'), async (req: Request, res: Response):
       },
       ipfs: {
         cid: ipfsResult.cid,
-        gatewayUrl: ipfsResult.gatewayUrl
+        gatewayUrl: ipfsResult.gatewayUrl,
+        metadataCid: metadataResult.cid,
+        metadataUrl: metadataResult.gatewayUrl
       },
       status: status,
       processingTime: {
         hashing: `${hashDuration}ms`,
         ipfs: `${ipfsDuration}ms`,
+        metadata: `${metadataDuration}ms`,
         total: `${totalDuration}ms`
       }
     });
