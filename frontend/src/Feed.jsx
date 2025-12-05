@@ -422,25 +422,52 @@ function Feed() {
                       {/* Post Header */}
                       <div className="flex items-start justify-between mb-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 rounded-full flex items-center justify-center font-bold text-lg text-white shadow-md ring-2 ring-white">
-                            {post.metadata?.creatorName ? post.metadata.creatorName.charAt(0).toUpperCase() :
-                             post.metadata?.creatorUsername ? post.metadata.creatorUsername.charAt(0).toUpperCase() :
-                             post.userInfo?.displayName ? post.userInfo.displayName.charAt(0).toUpperCase() : 
-                             post.metadata?.creator ? post.metadata.creator.slice(2, 3).toUpperCase() : 'U'}
-                          </div>
-                          <div>
-                          <div className="font-bold text-slate-900 hover:text-blue-600 transition-colors cursor-pointer">
-                            {post.metadata?.creatorName || 
-                             post.userInfo?.displayName || 
-                             post.metadata?.displayName || 
-                             (post.metadata?.creator ? truncateAddress(post.metadata.creator) : 'Unknown Creator')}
-                          </div>
-                          {post.metadata?.creatorUsername && (
-                            <div className="text-xs text-slate-500">
-                              @{post.metadata.creatorUsername}
+                          {/* Clickable Avatar */}
+                          {(post.metadata?.creatorUsername || post.userInfo?.username) ? (
+                            <Link to={`/user/${post.metadata?.creatorUsername || post.userInfo?.username}`}>
+                              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 rounded-full flex items-center justify-center font-bold text-lg text-white shadow-md ring-2 ring-white hover:scale-110 transition-transform cursor-pointer">
+                                {post.metadata?.creatorName ? post.metadata.creatorName.charAt(0).toUpperCase() :
+                                 post.metadata?.creatorUsername ? post.metadata.creatorUsername.charAt(0).toUpperCase() :
+                                 post.userInfo?.displayName ? post.userInfo.displayName.charAt(0).toUpperCase() :
+                                 post.userInfo?.username ? post.userInfo.username.charAt(0).toUpperCase() :
+                                 post.metadata?.creator ? post.metadata.creator.slice(2, 3).toUpperCase() : 'U'}
+                              </div>
+                            </Link>
+                          ) : (
+                            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 rounded-full flex items-center justify-center font-bold text-lg text-white shadow-md ring-2 ring-white">
+                              {post.metadata?.creator ? post.metadata.creator.slice(2, 3).toUpperCase() : 'U'}
                             </div>
                           )}
+                          
+                          <div>
+                            {/* Clickable Username */}
+                            {(post.metadata?.creatorUsername || post.userInfo?.username) ? (
+                              <Link 
+                                to={`/user/${post.metadata?.creatorUsername || post.userInfo?.username}`}
+                                className="font-bold text-slate-900 hover:text-blue-600 transition-colors cursor-pointer hover:underline"
+                              >
+                                {post.metadata?.creatorName || 
+                                 post.userInfo?.displayName || 
+                                 `@${post.metadata?.creatorUsername || post.userInfo?.username}`}
+                              </Link>
+                            ) : (
+                              <div className="font-bold text-slate-900">
+                                {post.metadata?.creator ? truncateAddress(post.metadata.creator) : 'Unknown Creator'}
+                              </div>
+                            )}
+                            
+                            {/* Username handle */}
+                            {(post.metadata?.creatorUsername || post.userInfo?.username) && (
+                              <div className="text-xs text-slate-500">
+                                @{post.metadata?.creatorUsername || post.userInfo?.username}
+                              </div>
+                            )}
+                            
+                            {/* Wallet address / Timestamp */}
                             <div className="text-xs text-slate-500 flex items-center gap-1">
+                              {(post.metadata?.creatorUsername || post.userInfo?.username) && post.metadata?.creator && (
+                                <span>{truncateAddress(post.metadata.creator)} • </span>
+                              )}
                               <span>🕒</span>
                               {post.metadata?.createdAt ? formatTimestamp(post.metadata.createdAt) : formatTimestamp(post.timestamp)}
                             </div>
