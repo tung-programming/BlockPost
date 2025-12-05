@@ -18,6 +18,7 @@ function Feed() {
   const [postsError, setPostsError] = useState("");
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
   const [stats, setStats] = useState({ total: 0, verified: 0, reposts: 0 });
+  const [walletAccount, setWalletAccount] = useState(null);
 
   useEffect(() => {
     // Fetch user data to check wallet link status
@@ -198,6 +199,43 @@ function Feed() {
     }
   };
 
+  const handleWalletClick = async () => {
+    try {
+      if (!window.ethereum) {
+        alert("MetaMask is not installed. Please install MetaMask to connect your wallet.");
+        return;
+      }
+
+      // Request account access
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const accounts = await provider.send("eth_requestAccounts", []);
+      
+      if (accounts.length > 0) {
+        setWalletAccount(accounts[0]);
+        console.log("Connected wallet:", accounts[0]);
+      }
+
+      // Listen for account changes
+      window.ethereum.on('accountsChanged', (accounts) => {
+        if (accounts.length > 0) {
+          setWalletAccount(accounts[0]);
+          console.log("Wallet account changed to:", accounts[0]);
+        } else {
+          setWalletAccount(null);
+          console.log("Wallet disconnected");
+        }
+      });
+
+    } catch (error) {
+      console.error("Error connecting wallet:", error);
+      if (error.code === 4001) {
+        alert("Please connect your wallet to continue.");
+      } else {
+        alert("Failed to connect wallet. Please try again.");
+      }
+    }
+  };
+
   const handleLogout = async () => {
     setLoggingOut(true);
     try {
@@ -351,8 +389,12 @@ function Feed() {
                 className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-slate-900"
               />
             </div>
-            <button className="px-4 py-2 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl font-medium transition-all hover:shadow-md text-slate-700">
-              Wallet
+            <button 
+              onClick={handleWalletClick}
+              className="px-4 py-2 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 rounded-xl font-semibold transition-all hover:scale-105 shadow-lg text-white flex items-center gap-2"
+            >
+              <span className="text-lg">🦊</span>
+              {walletAccount ? `${walletAccount.slice(0, 6)}...${walletAccount.slice(-4)}` : 'Connect Wallet'}
             </button>
           </div>
         </header>
@@ -403,7 +445,7 @@ function Feed() {
                 {posts.map((post) => (
                   <article
                     key={post.id}
-                    className="bg-slate-900 border border-slate-800 rounded-xl p-6"
+                    className="bg-white/90 backdrop-blur-sm border border-slate-200 rounded-2xl shadow-lg hover:shadow-xl transition-all"
                   >
                     {/* Repost Banner */}
                     {post.status === 'REPOST_DETECTED' && post.repost && (
