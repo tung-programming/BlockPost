@@ -1,4 +1,4 @@
-# 🎬 VideoGuard - Blockchain Video Copyright Protection System
+# 🎬 BlockPost - Blockchain Video Copyright Protection System
 
 > A decentralized video copyright protection platform using 3-layer hash detection on Polygon Mumbai testnet with dual IPFS storage.
 
@@ -28,7 +28,7 @@ The $10B video copyright problem: Content creators lose revenue to unauthorized 
 - ❌ Audio reuse in different videos
 - ❌ Timestamped proof of original ownership
 
-**VideoGuard** solves this with blockchain-based immutable ownership records and advanced perceptual hashing.
+**BlockPost** solves this with blockchain-based immutable ownership records and advanced perceptual hashing.
 
 ---
 
@@ -36,7 +36,7 @@ The $10B video copyright problem: Content creators lose revenue to unauthorized 
 
 ### 1. **3-Layer Duplicate Detection System**
 
-Unlike naive SHA-256 hashing, VideoGuard implements a sophisticated multi-layer detection approach:
+Unlike naive SHA-256 hashing, BlockPost implements a sophisticated multi-layer detection approach:
 
 | Layer       | Algorithm          | Detection Time | Detects                                      | Confidence |
 | ----------- | ------------------ | -------------- | -------------------------------------------- | ---------- |
@@ -172,7 +172,7 @@ User uploads video → Analysis (8 seconds) → Results:
                            ↓ Ethers.js
 ┌─────────────────────────────────────────────────────────────┐
 │  Layer 3: Blockchain (Polygon Mumbai Testnet)              │
-│  ├── VideoGuard.sol (deployed contract)                     │
+│  ├── BlockPost.sol (deployed contract)                     │
 │  ├── 3-layer duplicate detection logic                      │
 │  ├── Immutable ownership timestamps                         │
 │  └── Dispute resolution system                             │
@@ -204,7 +204,7 @@ User uploads video → Analysis (8 seconds) → Results:
 
 1. **Smart Contract Development** (2 hours)
 
-   - [ ] Write `VideoGuard.sol` with 3-layer detection
+   - [ ] Write `BlockPost.sol` with 3-layer detection
    - [ ] Implement `registerVideo()`, `detectRepost()`, `raiseDispute()` functions
    - [ ] Deploy to Polygon Mumbai testnet
    - [ ] Verify contract on Polygonscan
@@ -237,7 +237,7 @@ User uploads video → Analysis (8 seconds) → Results:
 
 ---
 
-## 🔧 Smart Contract Specification (VideoGuard.sol)
+## 🔧 Smart Contract Specification (BlockPost.sol)
 
 ### Data Structure
 
@@ -380,7 +380,7 @@ Health check endpoint.
 ```json
 {
   "status": "ok",
-  "message": "VideoGuard Backend API is running",
+  "message": "BlockPost Backend API is running",
   "timestamp": "2025-12-05T10:30:45.123Z"
 }
 ```
@@ -389,7 +389,7 @@ Health check endpoint.
 
 ## 🎪 Product Differentiators
 
-| Feature                   | Traditional Systems | VideoGuard                       |
+| Feature                   | Traditional Systems | BlockPost                       |
 | ------------------------- | ------------------- | -------------------------------- |
 | **Detection Method**      | SHA-256 only        | 3-layer (exact + visual + audio) |
 | **Re-encoding Detection** | ❌ Fails            | ✅ 95% accuracy                  |
@@ -455,7 +455,7 @@ Building the future of decentralized video copyright protection.
 
 ## 🎯 Demo for Judges (90 Seconds)
 
-> _"VideoGuard solves the $10B video copyright problem."_
+> _"BlockPost solves the $10B video copyright problem."_
 
 **[DEMO 1]** User uploads original dance video → 8 seconds later: _"✅ SUCCESSFULLY REGISTERED"_
 
