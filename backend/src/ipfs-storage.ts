@@ -18,11 +18,21 @@ import axios from 'axios';
 import { Readable } from 'stream';
 
 /**
- * IPFS pinning result containing CID and gateway URL
+ * IPFS pinning result containing CID and gateway URL (single file)
  */
 export interface IpfsResult {
   cid: string;                  // IPFS Content Identifier
   gatewayUrl: string;           // Public gateway URL for immediate access
+}
+
+/**
+ * Dual IPFS pinning result for media file + metadata JSON
+ */
+export interface DualIpfsResult {
+  mediaCid: string;             // CID of the raw media file
+  mediaGatewayUrl: string;      // Gateway URL for media file
+  metadataCid: string;          // CID of the metadata JSON
+  metadataGatewayUrl: string;   // Gateway URL for metadata JSON
 }
 
 /**
@@ -204,6 +214,113 @@ export async function retrieveFromIpfs(cid: string): Promise<Buffer> {
   } catch (error) {
     console.error('[IPFS ERROR] File retrieval failed:', error);
     throw new Error(`IPFS retrieval failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
+ * Pin a JSON object to IPFS using Pinata API
+ * 
+ * This function uploads a JSON metadata object to IPFS.
+ * Use this for storing post metadata separately from media files.
+ * 
+ * @param jsonData - The JSON object to pin
+ * @param name - Name for the pinned JSON (e.g., "metadata-{hash}")
+ * @returns Promise<IpfsResult> containing CID and gateway URL
+ * 
+ * @example
+ * ```typescript
+ * const metadata = {
+ *   creator: "0x123...",
+ *   createdAt: new Date().toISOString(),
+ *   assetType: "image",
+ *   mediaCid: "QmXxXx..."
+ * };
+ * const result = await pinJSONToIPFS(metadata, "metadata-image-123");
+ * ```
+ */
+export async function pinJSONToIPFS(
+  jsonData: Record<string, any>,
+  name: string
+): Promise<IpfsResult> {
+  console.log('\n[IPFS] Starting JSON pinning to IPFS via Pinata...');
+  console.log(`[IPFS] Name: ${name}`);
+  console.log(`[IPFS] Data keys: ${Object.keys(jsonData).join(', ')}`);
+  
+  const startTime = Date.now();
+
+  try {
+    // Check for Pinata credentials
+    const pinataJWT = process.env.PINATA_JWT;
+    const pinataApiKey = process.env.PINATA_API_KEY;
+    const pinataApiSecret = process.env.PINATA_API_SECRET;
+
+    if (!pinataJWT && (!pinataApiKey || !pinataApiSecret)) {
+      throw new Error(
+        'Pinata credentials not found. ' +
+        'Set PINATA_JWT or both PINATA_API_KEY and PINATA_API_SECRET in .env file'
+      );
+    }
+
+    // Prepare authentication headers
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json'
+    };
+
+    if (pinataJWT) {
+      headers['Authorization'] = `Bearer ${pinataJWT}`;
+      console.log('[IPFS] Using JWT authentication');
+    } else {
+      headers['pinata_api_key'] = pinataApiKey!;
+      headers['pinata_secret_api_key'] = pinataApiSecret!;
+      console.log('[IPFS] Using API key/secret authentication');
+    }
+
+    // Prepare request body
+    const body = {
+      pinataContent: jsonData,
+      pinataMetadata: {
+        name: name
+      },
+      pinataOptions: {
+        cidVersion: 1
+      }
+    };
+
+    // Make API request to Pinata
+    console.log('[IPFS] Uploading JSON to Pinata...');
+    const response = await axios.post<PinataResponse>(
+      'https://api.pinata.cloud/pinning/pinJSONToIPFS',
+      body,
+      { headers }
+    );
+
+    const cid = response.data.IpfsHash;
+    const gatewayUrl = `https://gateway.pinata.cloud/ipfs/${cid}`;
+
+    const duration = Date.now() - startTime;
+    console.log(`[IPFS] ✓ JSON pinned successfully in ${duration}ms`);
+    console.log(`[IPFS] CID: ${cid}`);
+    console.log(`[IPFS] Gateway URL: ${gatewayUrl}\n`);
+
+    return {
+      cid,
+      gatewayUrl
+    };
+
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    console.error(`[IPFS ERROR] JSON pinning failed after ${duration}ms:`, error);
+
+    if (axios.isAxiosError(error)) {
+      if (error.response) {
+        console.error('[IPFS ERROR] Pinata API response:', error.response.data);
+        throw new Error(`Pinata API error: ${JSON.stringify(error.response.data)}`);
+      } else if (error.request) {
+        throw new Error('No response from Pinata API. Check network connection.');
+      }
+    }
+
+    throw new Error(`IPFS JSON pinning failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 

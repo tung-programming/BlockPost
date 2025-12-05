@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { auth } from "./firebase/config";
 import { firestoreOperations } from "./firebase/firestoreRefs";
 import axios from "axios";
+import { registerAssetOnChain, detectRepost } from "./utils/blockchain";
 
 function CreatePost({ isOpen, onClose, onPostCreated }) {
   const navigate = useNavigate();
@@ -17,6 +18,8 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStatus, setUploadStatus] = useState(""); // "hashing", "ipfs", "blockchain", "complete"
+  const [blockchainData, setBlockchainData] = useState(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -148,6 +151,11 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
   };
 
   const uploadFile = async (file, apiUrl) => {
+    console.log('[UPLOAD] Starting upload process...');
+    console.log('[UPLOAD] File:', file.name, 'Type:', file.type, 'Size:', file.size);
+    console.log('[UPLOAD] Post Type:', postType);
+    console.log('[UPLOAD] Wallet Address:', userData.walletAddress);
+    
     const formData = new FormData();
     formData.append('video', file); // Backend expects 'video' field name
     formData.append('walletAddress', userData.walletAddress);
@@ -155,27 +163,217 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
     formData.append('description', description || (postType === 'text' ? textContent : ''));
 
     setUploadProgress(10);
+    setUploadStatus("uploading");
 
     const response = await axios.post(`${apiUrl}/upload`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
       },
       onUploadProgress: (progressEvent) => {
-        const progress = Math.round((progressEvent.loaded * 90) / progressEvent.total);
-        setUploadProgress(10 + progress);
+        const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+        setUploadProgress(Math.min(progress, 95));
       }
     });
 
-    if (response.data.success) {
-      setUploadProgress(100);
-      console.log("Post created successfully:", response.data);
+    if (response.data.success && response.data.status === 'READY_FOR_BLOCKCHAIN') {
+      // Backend returned hashes and IPFS data, now handle blockchain on frontend
+      console.log('[UPLOAD] ✓ Backend response: READY_FOR_BLOCKCHAIN');
+      console.log('[UPLOAD] Asset Type:', response.data.assetType);
+      console.log('[UPLOAD] Media CID:', response.data.ipfs.mediaCid);
+      console.log('[UPLOAD] Metadata CID:', response.data.ipfs.metadataCid);
+      console.log('[UPLOAD] Hashes:', response.data.hashes);
       
-      // Reset form
-      setTimeout(() => {
-        resetForm();
-        onClose();
-        if (onPostCreated) onPostCreated();
-      }, 1000);
+      setUploadProgress(70);
+      setUploadStatus("blockchain");
+      console.log("[UPLOAD] File uploaded to IPFS, initiating blockchain transaction...");
+      
+      try {
+        // Step 1: Check for repost on blockchain
+        setError("Checking for duplicates on blockchain...");
+        const detectResult = await detectRepost(
+          response.data.hashes.exactHash,
+          response.data.hashes.perceptualHash,
+          response.data.hashes.audioHash || 'no_audio'
+        );
+        
+        if (detectResult.isDuplicate) {
+          // Repost detected - don't register on chain
+          console.log('[UPLOAD] ⚠️ REPOST DETECTED');
+          console.log('[UPLOAD] Original Creator:', detectResult.originalCreator);
+          console.log('[UPLOAD] Match Type:', detectResult.matchType);
+          console.log('[UPLOAD] Confidence:', detectResult.confidence || 95);
+          
+          setUploadProgress(100);
+          setUploadStatus("complete");
+          setError("");
+          
+          setBlockchainData({
+            status: 'REPOST_DETECTED',
+            originalCreator: detectResult.originalCreator,
+            matchType: detectResult.matchType,
+            confidence: detectResult.confidence || 95,
+            mediaCid: response.data.ipfs.mediaCid,
+            mediaGatewayUrl: response.data.ipfs.mediaGatewayUrl,
+            metadataCid: response.data.ipfs.metadataCid,
+            metadataGatewayUrl: response.data.ipfs.metadataGatewayUrl
+          });
+          
+          console.log('[UPLOAD] Repost detected:', detectResult);
+          
+          // Register repost in backend for feed
+          console.log('[UPLOAD] Registering repost in backend...');
+          try {
+            const registerResponse = await axios.post(`${apiUrl}/register-post`, {
+              status: 'REPOST_DETECTED',
+              mediaCid: response.data.ipfs.mediaCid,
+              mediaGatewayUrl: response.data.ipfs.mediaGatewayUrl,
+              metadataCid: response.data.ipfs.metadataCid,
+              metadataGatewayUrl: response.data.ipfs.metadataGatewayUrl,
+              walletAddress: userData.walletAddress,
+              exactHash: response.data.hashes.exactHash,
+              perceptualHash: response.data.hashes.perceptualHash,
+              audioHash: response.data.hashes.audioHash,
+              assetType: response.data.assetType,
+              mimeType: response.data.fileInfo.mimeType,
+              fileName: response.data.fileInfo.originalName,
+              fileSize: response.data.fileInfo.size,
+              title: title || response.data.fileInfo.originalName,
+              repost: {
+                originalCreator: detectResult.originalCreator,
+                matchType: detectResult.matchType,
+                confidence: detectResult.confidence || 95
+              }
+            });
+            console.log('[UPLOAD] ✓ Repost registered in backend:', registerResponse.data);
+          } catch (registerError) {
+            console.error('[UPLOAD] ❌ Failed to register repost in backend:', registerError);
+          }
+          
+          // Call onPostCreated to refresh feed
+          if (onPostCreated) {
+            onPostCreated();
+          }
+          return;
+        }
+        
+        // Step 2: Register NEW asset on blockchain via MetaMask
+        console.log('[UPLOAD] ✓ New asset detected, registering on blockchain...');
+        console.log('[UPLOAD] Asset Type:', response.data.assetType);
+        
+        setUploadProgress(80);
+        setError("Please confirm transaction in MetaMask...");
+        
+        const blockchainResult = await registerAssetOnChain(
+          response.data.hashes.exactHash,
+          response.data.hashes.perceptualHash,
+          response.data.hashes.audioHash || 'no_audio',
+          response.data.ipfs.metadataCid  // Register metadata CID, not media CID
+        );
+        
+        console.log('[UPLOAD] ✓ Blockchain transaction confirmed!');
+        console.log('[UPLOAD] TX Hash:', blockchainResult.txHash);
+        console.log('[UPLOAD] Block Number:', blockchainResult.blockNumber);
+        
+        setUploadProgress(100);
+        setUploadStatus("complete");
+        setError("");
+        
+        setBlockchainData({
+          status: 'NEW_ASSET_REGISTERED',
+          txHash: blockchainResult.txHash,
+          blockNumber: blockchainResult.blockNumber,
+          contractAddress: blockchainResult.contractAddress,
+          gasUsed: blockchainResult.gasUsed,
+          mediaCid: response.data.ipfs.mediaCid,
+          mediaGatewayUrl: response.data.ipfs.mediaGatewayUrl,
+          metadataCid: response.data.ipfs.metadataCid,
+          metadataGatewayUrl: response.data.ipfs.metadataGatewayUrl
+        });
+        
+        console.log('[UPLOAD] Asset registered on blockchain:', blockchainResult);
+        
+        // Register post in backend for feed
+        console.log('[UPLOAD] Registering original post in backend...');
+        try {
+          const registerResponse = await axios.post(`${apiUrl}/register-post`, {
+            status: 'ORIGINAL',
+            mediaCid: response.data.ipfs.mediaCid,
+            mediaGatewayUrl: response.data.ipfs.mediaGatewayUrl,
+            metadataCid: response.data.ipfs.metadataCid,
+            metadataGatewayUrl: response.data.ipfs.metadataGatewayUrl,
+            walletAddress: userData.walletAddress,
+            exactHash: response.data.hashes.exactHash,
+            perceptualHash: response.data.hashes.perceptualHash,
+            audioHash: response.data.hashes.audioHash,
+            assetType: response.data.assetType,
+            mimeType: response.data.fileInfo.mimeType,
+            fileName: response.data.fileInfo.originalName,
+            fileSize: response.data.fileInfo.size,
+            title: title || response.data.fileInfo.originalName,
+            onChain: {
+              txHash: blockchainResult.txHash,
+              blockNumber: blockchainResult.blockNumber,
+              contractAddress: blockchainResult.contractAddress,
+              gasUsed: blockchainResult.gasUsed
+            }
+          });
+          console.log('[UPLOAD] ✓ Original post registered in backend:', registerResponse.data);
+        } catch (registerError) {
+          console.error('[UPLOAD] ❌ Failed to register post in backend:', registerError);
+          // Don't fail the whole operation if backend registration fails
+        }
+        
+        // Call onPostCreated to refresh feed
+        if (onPostCreated) {
+          onPostCreated();
+        }
+        
+      } catch (blockchainError) {
+        setError(blockchainError.message || "Blockchain transaction failed");
+        setUploading(false);
+        console.error("Blockchain error:", blockchainError);
+      }
+    } else if (response.data.success && response.data.status === 'REPOST_DETECTED') {
+      // Backend mode: Backend detected repost
+      setUploadProgress(100);
+      setUploadStatus("complete");
+      setError("");
+      
+      setBlockchainData({
+        status: 'REPOST_DETECTED',
+        originalCreator: response.data.repost.originalCreator,
+        matchType: response.data.repost.matchType,
+        confidence: response.data.repost.confidence,
+        mediaCid: response.data.ipfs.mediaCid,
+        mediaGatewayUrl: response.data.ipfs.mediaGatewayUrl,
+        metadataCid: response.data.ipfs.metadataCid,
+        metadataGatewayUrl: response.data.ipfs.metadataGatewayUrl
+      });
+      
+      if (onPostCreated) {
+        onPostCreated();
+      }
+    } else if (response.data.success && response.data.status === 'NEW_ASSET_REGISTERED') {
+      // Backend mode: Backend registered asset
+      setUploadProgress(100);
+      setUploadStatus("complete");
+      setError("");
+      
+      setBlockchainData({
+        status: 'NEW_ASSET_REGISTERED',
+        txHash: response.data.onChain.txHash,
+        blockNumber: response.data.onChain.blockNumber,
+        contractAddress: response.data.onChain.contractAddress,
+        gasUsed: response.data.onChain.gasUsed,
+        mediaCid: response.data.ipfs.mediaCid,
+        mediaGatewayUrl: response.data.ipfs.mediaGatewayUrl,
+        metadataCid: response.data.ipfs.metadataCid,
+        metadataGatewayUrl: response.data.ipfs.metadataGatewayUrl
+      });
+      
+      if (onPostCreated) {
+        onPostCreated();
+      }
     } else {
       throw new Error(response.data.error || "Upload failed");
     }
@@ -191,6 +389,8 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
     setFilePreview(null);
     setError("");
     setUploadProgress(0);
+    setUploadStatus("");
+    setBlockchainData(null);
   };
 
   const handleClose = () => {
@@ -424,14 +624,143 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
               {uploading && (
                 <div>
                   <div className="flex items-center justify-between text-sm mb-2">
-                    <span className="text-slate-700">Uploading to IPFS...</span>
-                    <span className="text-blue-600 font-medium">{uploadProgress}%</span>
+                    <span className="text-slate-400">
+                      {uploadProgress < 30 ? 'Hashing file...' : 
+                       uploadProgress < 70 ? 'Uploading to IPFS...' : 
+                       uploadProgress < 100 ? 'Registering on blockchain...' : 
+                       'Complete!'}
+                    </span>
+                    <span className="text-blue-400">{uploadProgress}%</span>
                   </div>
                   <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-300"
                       style={{ width: `${uploadProgress}%` }}
                     />
+                  </div>
+                </div>
+              )}
+
+              {/* Blockchain Success Details */}
+              {blockchainData && blockchainData.status === 'NEW_ASSET_REGISTERED' && (
+                <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg space-y-3">
+                  <div className="flex items-center gap-2 text-green-400 font-semibold">
+                    <span className="text-2xl">✅</span>
+                    <span>Asset Registered on Blockchain!</span>
+                  </div>
+                  
+                  <div className="space-y-2 text-sm">
+                    <div>
+                      <span className="text-slate-400">Transaction Hash:</span>
+                      <div className="mt-1 p-2 bg-slate-800 rounded font-mono text-xs break-all text-blue-400">
+                        {blockchainData.txHash}
+                      </div>
+                      <a 
+                        href={`https://amoy.polygonscan.com/tx/${blockchainData.txHash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-400 hover:text-blue-300 text-xs mt-1 inline-block"
+                      >
+                        View on PolygonScan →
+                      </a>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-400">Block Number:</span>
+                      <div className="mt-1 p-2 bg-slate-800 rounded font-mono text-xs text-slate-200">
+                        {blockchainData.blockNumber}
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-400">Media CID (IPFS):</span>
+                      <div className="mt-1 p-2 bg-slate-800 rounded font-mono text-xs break-all text-purple-400">
+                        {blockchainData.mediaCid}
+                      </div>
+                      <a 
+                        href={blockchainData.mediaGatewayUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-purple-400 hover:text-purple-300 text-xs mt-1 inline-block"
+                      >
+                        View Media on IPFS →
+                      </a>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-400">Metadata CID (stored on-chain):</span>
+                      <div className="mt-1 p-2 bg-slate-800 rounded font-mono text-xs break-all text-green-400">
+                        {blockchainData.metadataCid}
+                      </div>
+                      <a 
+                        href={blockchainData.metadataGatewayUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-green-400 hover:text-green-300 text-xs mt-1 inline-block"
+                      >
+                        View Metadata JSON →
+                      </a>
+                    </div>
+
+                    {blockchainData.gasUsed && (
+                      <div>
+                        <span className="text-slate-400">Gas Used:</span>
+                        <span className="ml-2 text-slate-200">{blockchainData.gasUsed}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Repost Detection Alert */}
+              {blockchainData && blockchainData.status === 'REPOST_DETECTED' && (
+                <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg space-y-3">
+                  <div className="flex items-center gap-2 text-amber-400 font-semibold">
+                    <span className="text-2xl">⚠️</span>
+                    <span>Repost of Existing Content</span>
+                  </div>
+                  
+                  <div className="space-y-2 text-sm">
+                    <p className="text-slate-300">
+                      This content matches existing on-chain content. Original creator: <span className="text-amber-400 font-mono">{blockchainData.originalCreator?.substring(0, 10)}...</span>
+                    </p>
+
+                    <div className="flex gap-4">
+                      <div>
+                        <span className="text-slate-400">Match Type:</span>
+                        <span className="ml-2 text-amber-300 font-semibold">{blockchainData.matchType}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400">Confidence:</span>
+                        <span className="ml-2 text-amber-300 font-semibold">{blockchainData.confidence}%</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-400">Original Creator Wallet:</span>
+                      <div className="mt-1 p-2 bg-slate-800 rounded font-mono text-xs break-all text-amber-400">
+                        {blockchainData.originalCreator}
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-400">Your Upload Media CID:</span>
+                      <div className="mt-1 p-2 bg-slate-800 rounded font-mono text-xs break-all text-purple-400">
+                        {blockchainData.mediaCid}
+                      </div>
+                      <a 
+                        href={blockchainData.mediaGatewayUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-purple-400 hover:text-purple-300 text-xs mt-1 inline-block"
+                      >
+                        View on IPFS →
+                      </a>
+                    </div>
+
+                    <p className="text-xs text-slate-500 italic">
+                      Note: Your file was uploaded to IPFS but not registered as a new asset on the blockchain.
+                    </p>
                   </div>
                 </div>
               )}

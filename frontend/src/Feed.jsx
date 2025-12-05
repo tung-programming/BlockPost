@@ -32,20 +32,50 @@ function Feed() {
       setPostsError("");
       
       const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
-      const response = await axios.get(`${API_URL}/posts`);
+      const response = await axios.get(`${API_URL}/assets`);
       
       if (response.data.success) {
-        const fetchedPosts = response.data.posts;
-        setPosts(fetchedPosts);
-        console.log(`Fetched ${fetchedPosts.length} posts from backend`);
+        console.log('[FEED] Backend response:', response.data);
+        console.log('[FEED] Number of assets received:', response.data.assets?.length || 0);
+        console.log('[FEED] Asset types:', response.data.assets?.map(a => a.assetType).join(', '));
         
-        // Fetch usernames for each post's wallet address
-        await enrichPostsWithUsernames(fetchedPosts);
+        // Fetch metadata JSON for each asset from IPFS
+        const assetsWithMetadata = await Promise.all(
+          response.data.assets.map(async (asset) => {
+            try {
+              console.log(`[FEED] Fetching metadata for ${asset.id} from ${asset.metadataGatewayUrl}`);
+              // Fetch metadata JSON from IPFS
+              const metadataResponse = await axios.get(asset.metadataGatewayUrl);
+              console.log(`[FEED] Metadata received for ${asset.id}:`, metadataResponse.data);
+              return {
+                ...asset,
+                metadata: metadataResponse.data
+              };
+            } catch (err) {
+              console.error(`[FEED] Failed to fetch metadata for ${asset.id}:`, err);
+              // Return asset without metadata if fetch fails
+              return {
+                ...asset,
+                metadata: {
+                  creator: 'Unknown',
+                  createdAt: asset.timestamp,
+                  assetType: asset.assetType,
+                  title: null,
+                  description: null
+                }
+              };
+            }
+          })
+        );
+        
+        console.log('[FEED] ✓ Final posts with metadata:', assetsWithMetadata);
+        setPosts(assetsWithMetadata);
+        console.log(`[FEED] Fetched ${assetsWithMetadata.length} assets with metadata from backend`);
       } else {
-        setPostsError('Failed to load posts');
+        setPostsError('Failed to load assets');
       }
     } catch (error) {
-      console.error('Error fetching posts:', error);
+      console.error('Error fetching assets:', error);
       setPostsError('Failed to connect to backend');
     } finally {
       setLoadingPosts(false);
@@ -413,6 +443,19 @@ function Feed() {
                     key={post.id}
                     className="bg-white/80 backdrop-blur-sm border border-slate-200 rounded-xl p-6 shadow-soft hover:shadow-card transition-all"
                   >
+                    {/* Repost Banner */}
+                    {post.status === 'REPOST_DETECTED' && post.repost && (
+                      <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                        <div className="flex items-center gap-2 text-amber-400 text-sm font-semibold">
+                          <span>⚠️</span>
+                          <span>Repost of original content by {truncateAddress(post.repost.originalCreator)}</span>
+                        </div>
+                        <div className="text-xs text-slate-400 mt-1">
+                          {post.repost.matchType} • {post.repost.confidence}% confidence
+                        </div>
+                      </div>
+                    )}
+
                     {/* Post Header */}
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center gap-3">
@@ -462,7 +505,7 @@ function Feed() {
                     <div className="mb-4 bg-slate-100 rounded-xl overflow-hidden">
                       {post.assetType === 'video' && (
                         <video
-                          src={post.gatewayUrl}
+                          src={post.mediaGatewayUrl}
                           controls
                           className="w-full max-h-96 object-contain"
                           preload="metadata"
@@ -472,15 +515,15 @@ function Feed() {
                       )}
                       {post.assetType === 'image' && (
                         <img
-                          src={post.gatewayUrl}
-                          alt={post.fileName}
+                          src={post.mediaGatewayUrl}
+                          alt={post.metadata?.title || post.metadata?.fileName || 'Image'}
                           className="w-full max-h-96 object-contain"
                         />
                       )}
                       {post.assetType === 'audio' && (
                         <div className="p-6">
                           <audio
-                            src={post.gatewayUrl}
+                            src={post.mediaGatewayUrl}
                             controls
                             className="w-full"
                           >
@@ -492,7 +535,7 @@ function Feed() {
                         <div className="p-6 text-center">
                           <p className="text-slate-700 mb-2">📄 {post.fileName}</p>
                           <a
-                            href={post.gatewayUrl}
+                            href={post.mediaGatewayUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-blue-600 hover:text-blue-700 text-sm font-medium"

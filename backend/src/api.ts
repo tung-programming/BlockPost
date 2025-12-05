@@ -16,7 +16,8 @@ import cors from 'cors';
 import multer, { MulterError } from 'multer';
 import dotenv from 'dotenv';
 import { computeHashes } from './hash-engine.js';
-import { pinToIpfs } from './ipfs-storage.js';
+import { pinToIpfs, pinJSONToIPFS } from './ipfs-storage.js';
+import { detectRepostOnChain, registerAssetOnChain } from './blockchain.js';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -32,13 +33,12 @@ const app: Application = express();
  */
 interface Post {
   id: string;
-  ipfsCid: string;
-  metadataCid: string;
-  gatewayUrl: string;
-  metadataUrl: string;
-  walletAddress: string;
-  title?: string;
-  description?: string;
+  mediaCid: string;              // CID of the raw media file
+  mediaGatewayUrl: string;       // Gateway URL for media file
+  metadataCid: string;           // CID of the metadata JSON
+  metadataGatewayUrl: string;    // Gateway URL for metadata JSON
+  walletAddress: string;         // Creator's wallet address
+  caption?: string;
   exactHash: string;
   perceptualHash: string;
   audioHash: string | null;
@@ -46,8 +46,17 @@ interface Post {
   mimeType: string;
   fileName: string;
   fileSize: number;
-  status: 'ORIGINAL' | 'EXACT_DUPLICATE' | 'VISUAL_MATCH' | 'AUDIO_MATCH';
+  status: 'ORIGINAL' | 'REPOST_DETECTED';
+  originalCreator?: string;      // For reposts: original creator address
+  matchType?: string;            // For reposts: type of match detected
+  confidence?: number;           // For reposts: confidence percentage
   timestamp: string;
+  onChain?: {                    // Blockchain data (only for originals)
+    txHash: string;
+    blockNumber: number;
+    contractAddress: string;
+    gasUsed: string;
+  };
 }
 
 const posts: Post[] = [];
@@ -186,7 +195,7 @@ app.get('/health', (_req: Request, res: Response): void => {
  * - Success: { success: true, posts: [...] }
  * - Error: { success: false, error: "Error message" }
  */
-app.get('/posts', (req: Request, res: Response): void => {
+app.get('/posts', (_req: Request, res: Response): void => {
   try {
     // Sort posts by timestamp (newest first)
     const sortedPosts = [...posts].sort((a, b) => 
@@ -210,19 +219,18 @@ app.get('/posts', (req: Request, res: Response): void => {
 });
 
 /**
- * Video Upload Endpoint
+ * Asset Upload Endpoint
  * POST /upload
  * 
- * Accepts video file uploads via multipart/form-data
- * Expects the video file under the "video" field
+ * Accepts media file uploads (video, image, audio) via multipart/form-data
  * 
  * Request:
  * - Content-Type: multipart/form-data
- * - Field name: "video"
- * - File type: video/*
+ * - Field name: "video" (for any media type)
+ * - Additional fields: walletAddress (required), title, description
  * 
  * Response:
- * - Success: { success: true, message: "Video uploaded successfully", fileInfo: {...} }
+ * - Success: Returns status (REPOST_DETECTED or NEW_ASSET_REGISTERED) with IPFS and blockchain data
  * - Error: { success: false, error: "Error message" }
  */
 app.post('/upload', upload.single('video'), async (req: Request, res: Response): Promise<void> => {
@@ -232,7 +240,20 @@ app.post('/upload', upload.single('video'), async (req: Request, res: Response):
       console.log('[UPLOAD] No file received in request');
       res.status(400).json({
         success: false,
-        error: 'No video file provided. Please upload a video file with the field name "video".'
+        error: 'No file provided. Please upload a file with the field name "video".'
+      });
+      return;
+    }
+
+    // Extract wallet address and optional fields from request body
+    const walletAddress = req.body.walletAddress || req.headers['x-wallet-address'] as string;
+    const title = req.body.title || null;
+    const description = req.body.description || null;
+
+    if (!walletAddress) {
+      res.status(400).json({
+        success: false,
+        error: 'Wallet address is required. Please provide walletAddress in request body or X-Wallet-Address header.'
       });
       return;
     }
@@ -242,9 +263,9 @@ app.post('/upload', upload.single('video'), async (req: Request, res: Response):
     console.log(`  - Original name: ${req.file.originalname}`);
     console.log(`  - MIME type: ${req.file.mimetype}`);
     console.log(`  - Size: ${(req.file.size / (1024 * 1024)).toFixed(2)} MB`);
-    console.log(`  - Buffer length: ${req.file.buffer.length} bytes`);
+    console.log(`  - Wallet: ${walletAddress}`);
 
-    // PHASE 2: Generate all hashes using multi-asset detection
+    // PHASE 1: Generate all hashes using multi-asset detection
     console.log('[UPLOAD] Starting multi-asset hash generation...');
     const hashStartTime = Date.now();
     
@@ -254,125 +275,201 @@ app.post('/upload', upload.single('video'), async (req: Request, res: Response):
     console.log(`[UPLOAD] ✓ Hash generation completed in ${hashDuration}ms`);
     console.log(`[UPLOAD] Asset Type: ${hashResult.assetType}`);
 
-    // PHASE 3: Pin to IPFS via Pinata
-    console.log('[UPLOAD] Starting IPFS pinning...');
-    const ipfsStartTime = Date.now();
+    // PHASE 2: Pin raw media file to IPFS
+    console.log('[UPLOAD] Pinning media file to IPFS...');
+    const mediaIpfsStart = Date.now();
     
-    const ipfsResult = await pinToIpfs(
+    const mediaResult = await pinToIpfs(
       req.file.buffer,
       req.file.originalname,
       req.file.mimetype,
       {
         assetType: hashResult.assetType,
-        exactHash: hashResult.exactHash,
-        uploadedAt: new Date().toISOString()
+        exactHash: hashResult.exactHash
       }
     );
     
-    const ipfsDuration = Date.now() - ipfsStartTime;
-    console.log(`[UPLOAD] ✓ IPFS pinning completed in ${ipfsDuration}ms`);
+    const mediaIpfsDuration = Date.now() - mediaIpfsStart;
+    console.log(`[UPLOAD] ✓ Media file pinned: ${mediaResult.cid}`);
 
-    // PHASE 4: Create and pin metadata JSON
-    console.log('[UPLOAD] Creating metadata JSON...');
-    const metadataStartTime = Date.now();
-    
-    const createdAt = new Date().toISOString();
+    // PHASE 3: Create and pin metadata JSON to IPFS
+    console.log('[UPLOAD] Creating and pinning metadata JSON...');
+    const metadataIpfsStart = Date.now();
     
     const metadata = {
+      creator: walletAddress,
+      createdAt: new Date().toISOString(),
       assetType: hashResult.assetType,
-      author: req.body.walletAddress || 'anonymous',
-      createdAt: createdAt,
-      title: req.body.title || req.file.originalname,
-      description: req.body.description || req.body.caption || '',
-      hashes: {
-        exactHash: hashResult.exactHash,
-        perceptualHash: hashResult.perceptualHash || (hashResult.assetType === 'audio' || hashResult.assetType === 'text' ? 'no_video' : ''),
-        audioHash: hashResult.audioHash || (hashResult.assetType === 'image' || hashResult.assetType === 'text' ? 'no_audio' : '')
-      },
-      media: {
-        originalName: req.file.originalname,
-        mimeType: req.file.mimetype,
-        sizeInMB: parseFloat((req.file.size / (1024 * 1024)).toFixed(2)),
-        cid: ipfsResult.cid,
-        gatewayUrl: ipfsResult.gatewayUrl
-      }
+      mediaCid: mediaResult.cid,
+      mediaMimeType: req.file.mimetype,
+      title: title,
+      description: description,
+      fileName: req.file.originalname,
+      fileSize: req.file.size
     };
 
-    // Pin metadata JSON to IPFS
-    const metadataBuffer = Buffer.from(JSON.stringify(metadata, null, 2));
-    const metadataResult = await pinToIpfs(
-      metadataBuffer,
-      `metadata_${req.file.originalname}.json`,
-      'application/json',
-      {
-        assetType: 'metadata',
-        relatedAssetCid: ipfsResult.cid,
-        author: req.body.walletAddress || 'anonymous',
-        uploadedAt: createdAt
-      }
+    const metadataResult = await pinJSONToIPFS(
+      metadata,
+      `metadata-${hashResult.exactHash.substring(0, 16)}`
     );
-
-    const metadataDuration = Date.now() - metadataStartTime;
-    console.log(`[UPLOAD] ✓ Metadata JSON pinned in ${metadataDuration}ms`);
-    console.log(`[UPLOAD] Metadata CID: ${metadataResult.cid}`);
-
-    // Log blockchain registration data (not actually sent yet)
-    console.log('\n[BLOCKCHAIN] Would register on Polygon with:');
-    console.log(JSON.stringify({
-      action: 'REGISTER_ASSET',
-      exactHash: hashResult.exactHash,
-      perceptualHash: hashResult.perceptualHash,
-      audioHash: hashResult.audioHash,
-      ipfsCid: ipfsResult.cid,
-      metadataCid: metadataResult.cid,
-      assetType: hashResult.assetType
-    }, null, 2));
-    console.log('[BLOCKCHAIN] (Actual contract call will be implemented in next phase)\n');
-
-    // Extract file information with all data
-    const fileInfo = {
-      originalName: req.file.originalname,
-      mimeType: req.file.mimetype,
-      size: req.file.size,
-      sizeInMB: (req.file.size / (1024 * 1024)).toFixed(2),
-      uploadedAt: new Date().toISOString()
-    };
-
-    const totalDuration = hashDuration + ipfsDuration + metadataDuration;
-    console.log(`[UPLOAD] ✓ Asset processed successfully!`);
-    console.log(`[UPLOAD] Total processing time: ${totalDuration}ms`);
-    console.log(`[UPLOAD] Exact Hash: ${hashResult.exactHash.substring(0, 16)}...`);
-    console.log(`[UPLOAD] Perceptual Hash: ${hashResult.perceptualHash.substring(0, 16)}...`);
-    console.log(`[UPLOAD] IPFS CID: ${ipfsResult.cid}\n`);
-
-    // Check for duplicate content
-    let status: 'ORIGINAL' | 'EXACT_DUPLICATE' | 'VISUAL_MATCH' | 'AUDIO_MATCH' = 'ORIGINAL';
     
-    for (const existingPost of posts) {
-      if (existingPost.exactHash === hashResult.exactHash) {
-        status = 'EXACT_DUPLICATE';
-        break;
-      }
-      if (hashResult.perceptualHash && existingPost.perceptualHash === hashResult.perceptualHash) {
-        status = 'VISUAL_MATCH';
-        break;
-      }
-      if (hashResult.audioHash && existingPost.audioHash === hashResult.audioHash) {
-        status = 'AUDIO_MATCH';
-        break;
-      }
+    const metadataIpfsDuration = Date.now() - metadataIpfsStart;
+    const totalIpfsDuration = mediaIpfsDuration + metadataIpfsDuration;
+    console.log(`[UPLOAD] ✓ Metadata JSON pinned: ${metadataResult.cid}`);
+
+    // PHASE 4: Check blockchain mode
+    const blockchainMode = process.env.BLOCKCHAIN_MODE || 'backend';
+    
+    if (blockchainMode === 'frontend') {
+      // Frontend mode: Return hashes and IPFS data, let frontend handle blockchain
+      const totalDuration = hashDuration + totalIpfsDuration;
+      
+      console.log(`[UPLOAD] ✓ Asset processed (frontend blockchain mode)`);
+      console.log(`[UPLOAD] Hashes generated, IPFS uploaded (media + metadata)`);
+      console.log(`[UPLOAD] Frontend will handle blockchain transaction\n`);
+      
+      res.json({
+        success: true,
+        status: 'READY_FOR_BLOCKCHAIN',
+        assetType: hashResult.assetType,
+        fileInfo: {
+          originalName: req.file.originalname,
+          mimeType: req.file.mimetype,
+          size: req.file.size,
+          sizeInMB: (req.file.size / (1024 * 1024)).toFixed(2)
+        },
+        hashes: {
+          exactHash: hashResult.exactHash,
+          perceptualHash: hashResult.perceptualHash,
+          audioHash: hashResult.audioHash
+        },
+        ipfs: {
+          mediaCid: mediaResult.cid,
+          mediaGatewayUrl: mediaResult.gatewayUrl,
+          metadataCid: metadataResult.cid,
+          metadataGatewayUrl: metadataResult.gatewayUrl
+        },
+        processingTime: {
+          hashing: `${hashDuration}ms`,
+          ipfs: `${totalIpfsDuration}ms`,
+          total: `${totalDuration}ms`
+        }
+      });
+      return;
     }
 
-    // Store post in memory
-    const newPost: Post = {
-      id: Date.now().toString(),
-      ipfsCid: ipfsResult.cid,
+    // Backend mode: Server handles blockchain transactions
+    console.log('[UPLOAD] Backend blockchain mode - detecting repost...');
+    const blockchainStartTime = Date.now();
+    
+    const detectResult = await detectRepostOnChain(
+      hashResult.exactHash,
+      hashResult.perceptualHash,
+      hashResult.audioHash || 'no_audio'
+    );
+
+    const blockchainDuration = Date.now() - blockchainStartTime;
+
+    if (detectResult.isDuplicate) {
+      // REPOST DETECTED - Do not register on blockchain, but allow upload
+      const totalDuration = hashDuration + totalIpfsDuration + blockchainDuration;
+      
+      console.log(`[UPLOAD] ⚠️  REPOST DETECTED!`);
+      console.log(`[UPLOAD] Original Creator: ${detectResult.originalCreator}`);
+      console.log(`[UPLOAD] Match Type: ${detectResult.matchType}`);
+      console.log(`[UPLOAD] Confidence: ${detectResult.confidence}%`);
+      console.log(`[UPLOAD] Upload allowed but NOT registered on-chain`);
+      console.log(`[UPLOAD] Total processing time: ${totalDuration}ms\n`);
+
+      // Store in memory as a repost
+      const repostEntry: Post = {
+        id: `repost-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+        mediaCid: mediaResult.cid,
+        mediaGatewayUrl: mediaResult.gatewayUrl,
+        metadataCid: metadataResult.cid,
+        metadataGatewayUrl: metadataResult.gatewayUrl,
+        walletAddress: walletAddress,
+        caption: title || undefined,
+        exactHash: hashResult.exactHash,
+        perceptualHash: hashResult.perceptualHash,
+        audioHash: hashResult.audioHash,
+        assetType: hashResult.assetType,
+        mimeType: req.file.mimetype,
+        fileName: req.file.originalname,
+        fileSize: req.file.size,
+        status: 'REPOST_DETECTED',
+        originalCreator: detectResult.originalCreator,
+        matchType: detectResult.matchType,
+        confidence: detectResult.confidence,
+        timestamp: new Date().toISOString()
+      };
+      posts.push(repostEntry);
+
+      res.json({
+        success: true,
+        status: 'REPOST_DETECTED',
+        assetType: hashResult.assetType,
+        fileInfo: {
+          originalName: req.file.originalname,
+          mimeType: req.file.mimetype,
+          size: req.file.size,
+          sizeInMB: (req.file.size / (1024 * 1024)).toFixed(2)
+        },
+        hashes: {
+          exactHash: hashResult.exactHash,
+          perceptualHash: hashResult.perceptualHash,
+          audioHash: hashResult.audioHash
+        },
+        ipfs: {
+          mediaCid: mediaResult.cid,
+          mediaGatewayUrl: mediaResult.gatewayUrl,
+          metadataCid: metadataResult.cid,
+          metadataGatewayUrl: metadataResult.gatewayUrl
+        },
+        repost: {
+          originalCreator: detectResult.originalCreator,
+          matchType: detectResult.matchType,
+          confidence: detectResult.confidence
+        },
+        processingTime: {
+          hashing: `${hashDuration}ms`,
+          ipfs: `${totalIpfsDuration}ms`,
+          blockchain: `${blockchainDuration}ms`,
+          total: `${totalDuration}ms`
+        }
+      });
+      return;
+    }
+
+    // PHASE 5: NEW ASSET - Register on blockchain (use metadataCid, not mediaCid)
+    console.log('[UPLOAD] New asset detected, registering on blockchain...');
+    
+    const receipt = await registerAssetOnChain({
+      exactHash: hashResult.exactHash,
+      perceptualHash: hashResult.perceptualHash,
+      audioHash: hashResult.audioHash || 'no_audio',
+      ipfsCid: metadataResult.cid,  // Store metadata CID on-chain, NOT media CID
+      assetType: hashResult.assetType
+    });
+
+    const totalBlockchainDuration = Date.now() - blockchainStartTime;
+    const totalDuration = hashDuration + totalIpfsDuration + totalBlockchainDuration;
+
+    console.log(`[UPLOAD] ✓ NEW ASSET REGISTERED!`);
+    console.log(`[UPLOAD] Transaction Hash: ${receipt.hash}`);
+    console.log(`[UPLOAD] Block Number: ${receipt.blockNumber}`);
+    console.log(`[UPLOAD] Metadata CID stored on-chain: ${metadataResult.cid}`);
+    console.log(`[UPLOAD] Total processing time: ${totalDuration}ms\n`);
+
+    // Store in memory as original
+    const originalEntry: Post = {
+      id: `original-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+      mediaCid: mediaResult.cid,
+      mediaGatewayUrl: mediaResult.gatewayUrl,
       metadataCid: metadataResult.cid,
-      gatewayUrl: ipfsResult.gatewayUrl,
-      metadataUrl: metadataResult.gatewayUrl,
-      walletAddress: req.body.walletAddress || 'anonymous',
-      title: req.body.title || req.file.originalname,
-      description: req.body.description || '',
+      metadataGatewayUrl: metadataResult.gatewayUrl,
+      walletAddress: walletAddress,
+      caption: title || undefined,
       exactHash: hashResult.exactHash,
       perceptualHash: hashResult.perceptualHash,
       audioHash: hashResult.audioHash,
@@ -380,38 +477,48 @@ app.post('/upload', upload.single('video'), async (req: Request, res: Response):
       mimeType: req.file.mimetype,
       fileName: req.file.originalname,
       fileSize: req.file.size,
-      status: status,
-      timestamp: createdAt
+      status: 'ORIGINAL',
+      timestamp: new Date().toISOString(),
+      onChain: {
+        txHash: receipt.hash,
+        blockNumber: receipt.blockNumber || 0,
+        contractAddress: process.env.CONTRACT_ADDRESS || '',
+        gasUsed: receipt.gasUsed.toString()
+      }
     };
+    posts.push(originalEntry);
 
-    posts.push(newPost);
-    console.log(`[UPLOAD] ✓ Post stored with status: ${status}`);
-    console.log(`[UPLOAD] Total posts in memory: ${posts.length}\n`);
-
-    // Return success response with all data
     res.json({
       success: true,
-      message: 'Asset uploaded, hashed, and pinned to IPFS successfully',
-      post: newPost,
-      metadata: metadata,
+      status: 'NEW_ASSET_REGISTERED',
       assetType: hashResult.assetType,
-      fileInfo: fileInfo,
+      fileInfo: {
+        originalName: req.file.originalname,
+        mimeType: req.file.mimetype,
+        size: req.file.size,
+        sizeInMB: (req.file.size / (1024 * 1024)).toFixed(2)
+      },
       hashes: {
         exactHash: hashResult.exactHash,
         perceptualHash: hashResult.perceptualHash,
         audioHash: hashResult.audioHash
       },
       ipfs: {
-        cid: ipfsResult.cid,
-        gatewayUrl: ipfsResult.gatewayUrl,
+        mediaCid: mediaResult.cid,
+        mediaGatewayUrl: mediaResult.gatewayUrl,
         metadataCid: metadataResult.cid,
-        metadataUrl: metadataResult.gatewayUrl
+        metadataGatewayUrl: metadataResult.gatewayUrl
       },
-      status: status,
+      onChain: {
+        txHash: receipt.hash,
+        blockNumber: receipt.blockNumber,
+        contractAddress: process.env.CONTRACT_ADDRESS,
+        gasUsed: receipt.gasUsed.toString()
+      },
       processingTime: {
         hashing: `${hashDuration}ms`,
-        ipfs: `${ipfsDuration}ms`,
-        metadata: `${metadataDuration}ms`,
+        ipfs: `${totalIpfsDuration}ms`,
+        blockchain: `${totalBlockchainDuration}ms`,
         total: `${totalDuration}ms`
       }
     });
@@ -424,6 +531,158 @@ app.post('/upload', upload.single('video'), async (req: Request, res: Response):
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'An error occurred while processing the upload'
+    });
+  }
+});
+
+/**
+ * Register Post After Frontend Blockchain Transaction
+ * POST /register-post
+ * 
+ * Called by frontend after successful blockchain transaction to store post in backend
+ * 
+ * Request body:
+ * - status: 'ORIGINAL' | 'REPOST_DETECTED'
+ * - mediaCid, metadataCid, walletAddress, hashes, etc.
+ */
+app.post('/register-post', express.json(), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const {
+      status,
+      mediaCid,
+      mediaGatewayUrl,
+      metadataCid,
+      metadataGatewayUrl,
+      walletAddress,
+      exactHash,
+      perceptualHash,
+      audioHash,
+      assetType,
+      mimeType,
+      fileName,
+      fileSize,
+      title,
+      onChain,
+      repost
+    } = req.body;
+
+    const newPost: Post = {
+      id: `${status === 'ORIGINAL' ? 'original' : 'repost'}-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+      mediaCid,
+      mediaGatewayUrl,
+      metadataCid,
+      metadataGatewayUrl,
+      walletAddress,
+      caption: title || undefined,
+      exactHash,
+      perceptualHash,
+      audioHash,
+      assetType,
+      mimeType,
+      fileName,
+      fileSize,
+      status,
+      timestamp: new Date().toISOString(),
+      ...(status === 'REPOST_DETECTED' && repost && {
+        originalCreator: repost.originalCreator,
+        matchType: repost.matchType,
+        confidence: repost.confidence
+      }),
+      ...(status === 'ORIGINAL' && onChain && {
+        onChain: {
+          txHash: onChain.txHash,
+          blockNumber: onChain.blockNumber,
+          contractAddress: onChain.contractAddress,
+          gasUsed: onChain.gasUsed
+        }
+      })
+    };
+
+    posts.push(newPost);
+
+    console.log(`[REGISTER POST] ✓ Post registered: ${newPost.id} (${status})`);
+    console.log(`[REGISTER POST] Asset Type: ${assetType}`);
+    console.log(`[REGISTER POST] Media CID: ${mediaCid}`);
+    console.log(`[REGISTER POST] Metadata CID: ${metadataCid}`);
+    console.log(`[REGISTER POST] Total posts in array: ${posts.length}`);
+    console.log(`[REGISTER POST] Full post data:`, JSON.stringify(newPost, null, 2));
+
+    res.json({
+      success: true,
+      message: 'Post registered successfully',
+      postId: newPost.id
+    });
+
+  } catch (error) {
+    console.error('[REGISTER POST ERROR]', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to register post'
+    });
+  }
+});
+
+/**
+ * Assets/Feed Listing Endpoint
+ * GET /assets
+ * 
+ * Returns a list of all uploaded assets (both original and reposts)
+ * with complete IPFS and blockchain data.
+ * 
+ * In production, this would fetch from contract events or a decentralized database.
+ * For now, returns in-memory posts array.
+ * 
+ * Response:
+ * - Success: { success: true, count: number, assets: AssetSummary[] }
+ */
+app.get('/assets', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    // Sort by timestamp (newest first)
+    const sortedAssets = [...posts].sort((a, b) => 
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+
+    console.log(`[GET ASSETS] Total posts in memory: ${posts.length}`);
+    console.log(`[GET ASSETS] Returning ${sortedAssets.length} assets`);
+    console.log(`[GET ASSETS] Asset types:`, sortedAssets.map(a => a.assetType).join(', '));
+    console.log(`[GET ASSETS] Asset IDs:`, sortedAssets.map(a => a.id).join(', '));
+
+    res.json({
+      success: true,
+      count: sortedAssets.length,
+      assets: sortedAssets.map(post => ({
+        id: post.id,
+        assetType: post.assetType,
+        mediaCid: post.mediaCid,
+        mediaGatewayUrl: post.mediaGatewayUrl,
+        metadataCid: post.metadataCid,
+        metadataGatewayUrl: post.metadataGatewayUrl,
+        hashes: {
+          exactHash: post.exactHash,
+          perceptualHash: post.perceptualHash,
+          audioHash: post.audioHash
+        },
+        status: post.status,
+        timestamp: post.timestamp,
+        // Include repost info if it's a repost
+        ...(post.status === 'REPOST_DETECTED' && {
+          repost: {
+            originalCreator: post.originalCreator,
+            matchType: post.matchType,
+            confidence: post.confidence
+          }
+        }),
+        // Include blockchain data if it's an original
+        ...(post.status === 'ORIGINAL' && post.onChain && {
+          onChain: post.onChain
+        })
+      }))
+    });
+  } catch (error) {
+    console.error('[GET ASSETS ERROR]', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch assets'
     });
   }
 });

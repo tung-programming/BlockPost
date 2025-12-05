@@ -140,7 +140,7 @@ export async function detectRepostOnChain(
     const normalizedExactHash = normalizeHash(exactHash);
 
     // Call contract view function (no gas cost)
-    const result: ContractDetectResponse = await contract.detectRepost(
+    const result: any = await contract.detectRepost(
       normalizedExactHash,
       perceptualHash,
       audioHash
@@ -148,11 +148,18 @@ export async function detectRepostOnChain(
 
     const duration = Date.now() - startTime;
 
+    // Handle contract response - check multiple possible field names
+    const isRepost = result.isRepost ?? result.isDuplicate ?? result[0] ?? false;
+    const originalCreator = result.originalCreator ?? result.creator ?? result[1] ?? '0x0000000000000000000000000000000000000000';
+    const matchType = result.matchType ?? result[3] ?? 'NONE';
+
+    console.log('[BLOCKCHAIN] Raw contract response:', JSON.stringify(result, null, 2));
+
     const detectResult: DetectResult = {
-      isDuplicate: result.isRepost,
-      originalCreator: result.originalCreator,
-      matchType: result.matchType,
-      confidence: result.matchType === 'EXACT_MATCH' ? 100 : result.matchType === 'PERCEPTUAL_MATCH' ? 95 : result.matchType === 'AUDIO_MATCH' ? 92 : 0
+      isDuplicate: Boolean(isRepost),
+      originalCreator: originalCreator,
+      matchType: matchType,
+      confidence: matchType === 'EXACT_MATCH' ? 100 : matchType === 'PERCEPTUAL_MATCH' ? 95 : matchType === 'AUDIO_MATCH' ? 92 : 0
     };
 
     console.log(`[BLOCKCHAIN] ✓ Detection completed in ${duration}ms`);
