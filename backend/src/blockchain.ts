@@ -28,14 +28,15 @@ export interface DetectResult {
 /**
  * Contract interaction response structure from smart contract
  * Matches the actual detectRepost return values from VideoGuard.sol
+ * Currently unused but kept for future reference
  */
-interface ContractDetectResponse {
-  isRepost: boolean;
-  originalCreator: string;
-  originalIpfsHash: string;
-  matchType: string;
-  originalHash: string;
-}
+// interface ContractDetectResponse {
+//   isRepost: boolean;
+//   originalCreator: string;
+//   originalIpfsHash: string;
+//   matchType: string;
+//   originalHash: string;
+// }
 
 /**
  * Get initialized contract instance with signer

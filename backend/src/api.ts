@@ -171,10 +171,24 @@ async function loadPostsFromPinata(): Promise<void> {
  * Allows frontend applications to make requests to this backend
  * Configure origins based on your frontend URL
  */
+const allowedOrigins = process.env.CORS_ORIGIN 
+  ? process.env.CORS_ORIGIN.split(',') 
+  : ['http://localhost:5173', 'http://localhost:3001'];
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*', // Allow all origins by default
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
 }));
 
 /**

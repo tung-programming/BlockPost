@@ -23,6 +23,17 @@
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+  "include": [
+    "src/api.ts",
+    "src/blockchain.ts",
+    "src/hash-engine.ts",
+    "src/ipfs-storage.ts",
+    "src/ffprobe-static.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/**/*.cjs",
+    "src/api-fixed.ts"
+  ]
 }
