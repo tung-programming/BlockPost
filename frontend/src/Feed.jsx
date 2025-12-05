@@ -34,18 +34,24 @@ function Feed() {
       const response = await axios.get(`${API_URL}/assets`);
       
       if (response.data.success) {
+        console.log('[FEED] Backend response:', response.data);
+        console.log('[FEED] Number of assets received:', response.data.assets?.length || 0);
+        console.log('[FEED] Asset types:', response.data.assets?.map(a => a.assetType).join(', '));
+        
         // Fetch metadata JSON for each asset from IPFS
         const assetsWithMetadata = await Promise.all(
           response.data.assets.map(async (asset) => {
             try {
+              console.log(`[FEED] Fetching metadata for ${asset.id} from ${asset.metadataGatewayUrl}`);
               // Fetch metadata JSON from IPFS
               const metadataResponse = await axios.get(asset.metadataGatewayUrl);
+              console.log(`[FEED] Metadata received for ${asset.id}:`, metadataResponse.data);
               return {
                 ...asset,
                 metadata: metadataResponse.data
               };
             } catch (err) {
-              console.error(`Failed to fetch metadata for ${asset.id}:`, err);
+              console.error(`[FEED] Failed to fetch metadata for ${asset.id}:`, err);
               // Return asset without metadata if fetch fails
               return {
                 ...asset,
@@ -61,8 +67,9 @@ function Feed() {
           })
         );
         
+        console.log('[FEED] ✓ Final posts with metadata:', assetsWithMetadata);
         setPosts(assetsWithMetadata);
-        console.log(`Fetched ${assetsWithMetadata.length} assets with metadata from backend`);
+        console.log(`[FEED] Fetched ${assetsWithMetadata.length} assets with metadata from backend`);
       } else {
         setPostsError('Failed to load assets');
       }

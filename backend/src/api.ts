@@ -600,7 +600,12 @@ app.post('/register-post', express.json(), async (req: Request, res: Response): 
 
     posts.push(newPost);
 
-    console.log(`[REGISTER POST] Post registered: ${newPost.id} (${status})`);
+    console.log(`[REGISTER POST] ✓ Post registered: ${newPost.id} (${status})`);
+    console.log(`[REGISTER POST] Asset Type: ${assetType}`);
+    console.log(`[REGISTER POST] Media CID: ${mediaCid}`);
+    console.log(`[REGISTER POST] Metadata CID: ${metadataCid}`);
+    console.log(`[REGISTER POST] Total posts in array: ${posts.length}`);
+    console.log(`[REGISTER POST] Full post data:`, JSON.stringify(newPost, null, 2));
 
     res.json({
       success: true,
@@ -637,7 +642,10 @@ app.get('/assets', async (_req: Request, res: Response): Promise<void> => {
       new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
     );
 
+    console.log(`[GET ASSETS] Total posts in memory: ${posts.length}`);
     console.log(`[GET ASSETS] Returning ${sortedAssets.length} assets`);
+    console.log(`[GET ASSETS] Asset types:`, sortedAssets.map(a => a.assetType).join(', '));
+    console.log(`[GET ASSETS] Asset IDs:`, sortedAssets.map(a => a.id).join(', '));
 
     res.json({
       success: true,
