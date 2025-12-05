@@ -151,6 +151,11 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
   };
 
   const uploadFile = async (file, apiUrl) => {
+    console.log('[UPLOAD] Starting upload process...');
+    console.log('[UPLOAD] File:', file.name, 'Type:', file.type, 'Size:', file.size);
+    console.log('[UPLOAD] Post Type:', postType);
+    console.log('[UPLOAD] Wallet Address:', userData.walletAddress);
+    
     const formData = new FormData();
     formData.append('video', file); // Backend expects 'video' field name
     formData.append('walletAddress', userData.walletAddress);
@@ -172,9 +177,15 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
 
     if (response.data.success && response.data.status === 'READY_FOR_BLOCKCHAIN') {
       // Backend returned hashes and IPFS data, now handle blockchain on frontend
+      console.log('[UPLOAD] ✓ Backend response: READY_FOR_BLOCKCHAIN');
+      console.log('[UPLOAD] Asset Type:', response.data.assetType);
+      console.log('[UPLOAD] Media CID:', response.data.ipfs.mediaCid);
+      console.log('[UPLOAD] Metadata CID:', response.data.ipfs.metadataCid);
+      console.log('[UPLOAD] Hashes:', response.data.hashes);
+      
       setUploadProgress(70);
       setUploadStatus("blockchain");
-      console.log("File uploaded to IPFS, initiating blockchain transaction...");
+      console.log("[UPLOAD] File uploaded to IPFS, initiating blockchain transaction...");
       
       try {
         // Step 1: Check for repost on blockchain
@@ -187,6 +198,11 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
         
         if (detectResult.isDuplicate) {
           // Repost detected - don't register on chain
+          console.log('[UPLOAD] ⚠️ REPOST DETECTED');
+          console.log('[UPLOAD] Original Creator:', detectResult.originalCreator);
+          console.log('[UPLOAD] Match Type:', detectResult.matchType);
+          console.log('[UPLOAD] Confidence:', detectResult.confidence || 95);
+          
           setUploadProgress(100);
           setUploadStatus("complete");
           setError("");
@@ -202,11 +218,12 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
             metadataGatewayUrl: response.data.ipfs.metadataGatewayUrl
           });
           
-          console.log("Repost detected:", detectResult);
+          console.log('[UPLOAD] Repost detected:', detectResult);
           
           // Register repost in backend for feed
+          console.log('[UPLOAD] Registering repost in backend...');
           try {
-            await axios.post(`${apiUrl}/register-post`, {
+            const registerResponse = await axios.post(`${apiUrl}/register-post`, {
               status: 'REPOST_DETECTED',
               mediaCid: response.data.ipfs.mediaCid,
               mediaGatewayUrl: response.data.ipfs.mediaGatewayUrl,
@@ -227,9 +244,9 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
                 confidence: detectResult.confidence || 95
               }
             });
-            console.log("Repost registered in backend for feed");
+            console.log('[UPLOAD] ✓ Repost registered in backend:', registerResponse.data);
           } catch (registerError) {
-            console.error("Failed to register repost in backend:", registerError);
+            console.error('[UPLOAD] ❌ Failed to register repost in backend:', registerError);
           }
           
           // Call onPostCreated to refresh feed
@@ -240,6 +257,9 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
         }
         
         // Step 2: Register NEW asset on blockchain via MetaMask
+        console.log('[UPLOAD] ✓ New asset detected, registering on blockchain...');
+        console.log('[UPLOAD] Asset Type:', response.data.assetType);
+        
         setUploadProgress(80);
         setError("Please confirm transaction in MetaMask...");
         
@@ -249,6 +269,10 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
           response.data.hashes.audioHash || 'no_audio',
           response.data.ipfs.metadataCid  // Register metadata CID, not media CID
         );
+        
+        console.log('[UPLOAD] ✓ Blockchain transaction confirmed!');
+        console.log('[UPLOAD] TX Hash:', blockchainResult.txHash);
+        console.log('[UPLOAD] Block Number:', blockchainResult.blockNumber);
         
         setUploadProgress(100);
         setUploadStatus("complete");
@@ -266,11 +290,12 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
           metadataGatewayUrl: response.data.ipfs.metadataGatewayUrl
         });
         
-        console.log("Asset registered on blockchain:", blockchainResult);
+        console.log('[UPLOAD] Asset registered on blockchain:', blockchainResult);
         
         // Register post in backend for feed
+        console.log('[UPLOAD] Registering original post in backend...');
         try {
-          await axios.post(`${apiUrl}/register-post`, {
+          const registerResponse = await axios.post(`${apiUrl}/register-post`, {
             status: 'ORIGINAL',
             mediaCid: response.data.ipfs.mediaCid,
             mediaGatewayUrl: response.data.ipfs.mediaGatewayUrl,
@@ -292,9 +317,9 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
               gasUsed: blockchainResult.gasUsed
             }
           });
-          console.log("Post registered in backend for feed");
+          console.log('[UPLOAD] ✓ Original post registered in backend:', registerResponse.data);
         } catch (registerError) {
-          console.error("Failed to register post in backend:", registerError);
+          console.error('[UPLOAD] ❌ Failed to register post in backend:', registerError);
           // Don't fail the whole operation if backend registration fails
         }
         
