@@ -40,6 +40,7 @@ curl -X POST http://localhost:3001/upload \
 ## Expected Response
 
 ### For a NEW asset (first upload):
+
 ```json
 {
   "success": true,
@@ -65,6 +66,7 @@ curl -X POST http://localhost:3001/upload \
 ```
 
 ### For a REPOST (same file uploaded again):
+
 ```json
 {
   "success": true,
@@ -84,15 +86,18 @@ curl -X POST http://localhost:3001/upload \
 ## What Happens When You Upload:
 
 1. 🔐 **Hashing** (~2-4 seconds)
+
    - SHA-256 for exact matching
    - dHash for perceptual matching
    - Audio fingerprint placeholder
 
 2. ☁️ **IPFS Pinning** (~3-5 seconds)
+
    - File uploaded to Pinata
    - CID and gateway URL generated
 
 3. ⛓️ **Blockchain Detection** (~2-3 seconds)
+
    - Calls smart contract `detectRepost()` function
    - Checks if hashes exist on-chain
 
@@ -104,27 +109,32 @@ curl -X POST http://localhost:3001/upload \
 ## Troubleshooting
 
 ### Error: "Blockchain interaction failed"
+
 - **Check wallet has MATIC**: Get from https://faucet.polygon.technology/
 - **Check BACKEND_PRIVATE_KEY**: Make sure it's set correctly in .env
 - **Check RPC**: Make sure POLYGON_RPC is working
 
 ### Error: "No response from Pinata"
+
 - **Check Pinata credentials**: PINATA_JWT should be set in .env
 
 ### Error: "File too large"
+
 - **Max size is 100MB**: Try a smaller file
 
 ## Quick Test Files
 
 You can test with:
+
 - **Video**: Any .mp4, .avi, .mov file
-- **Image**: Any .jpg, .png, .gif file  
+- **Image**: Any .jpg, .png, .gif file
 - **Audio**: Any .mp3, .wav file
 - **Document**: Any .pdf, .txt file
 
 ## Viewing Results
 
 After a successful upload, you can:
+
 1. **View on IPFS**: Copy the `gatewayUrl` and paste in browser
 2. **View on PolygonScan**: `https://amoy.polygonscan.com/tx/{txHash}`
 3. **View in MetaMask**: Check your wallet activity
