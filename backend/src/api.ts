@@ -18,6 +18,7 @@ import dotenv from 'dotenv';
 import { computeHashes } from './hash-engine.js';
 import { pinToIpfs, pinJSONToIPFS } from './ipfs-storage.js';
 import { detectRepostOnChain, registerAssetOnChain } from './blockchain.js';
+import axios from 'axios';
 
 // Load environment variables from .env file
 dotenv.config();
@@ -60,6 +61,108 @@ interface Post {
 }
 
 const posts: Post[] = [];
+
+/**
+ * Load all existing posts from Pinata on server startup
+ */
+async function loadPostsFromPinata(): Promise<void> {
+  try {
+    console.log('[STARTUP] Loading existing posts from Pinata...');
+    
+    const pinataApiKey = process.env.PINATA_API_KEY;
+    const pinataSecretKey = process.env.PINATA_API_SECRET;
+    const pinataJwt = process.env.PINATA_JWT;
+    
+    if (!pinataApiKey && !pinataJwt) {
+      console.log('[STARTUP] No Pinata credentials found, skipping post loading');
+      return;
+    }
+
+    // Build authorization header
+    const headers: any = {};
+    if (pinataJwt) {
+      headers['Authorization'] = `Bearer ${pinataJwt}`;
+    } else if (pinataApiKey && pinataSecretKey) {
+      headers['pinata_api_key'] = pinataApiKey;
+      headers['pinata_secret_api_key'] = pinataSecretKey;
+    }
+
+    // Fetch list of pinned files from Pinata
+    const response = await axios.get('https://api.pinata.cloud/data/pinList?status=pinned&pageLimit=1000', {
+      headers
+    });
+
+    const pinnedFiles = response.data.rows || [];
+    console.log(`[STARTUP] Found ${pinnedFiles.length} pinned files on Pinata`);
+
+    // Filter for metadata JSON files (they contain post data)
+    const metadataFiles = pinnedFiles.filter((file: any) => 
+      file.metadata?.name?.includes('metadata') || 
+      file.metadata?.keyvalues?.type === 'metadata'
+    );
+
+    console.log(`[STARTUP] Found ${metadataFiles.length} metadata files`);
+
+    // Load each metadata file and reconstruct post
+    for (const file of metadataFiles) {
+      try {
+        const metadataCid = file.ipfs_pin_hash;
+        const metadataUrl = `https://gateway.pinata.cloud/ipfs/${metadataCid}`;
+        
+        // Fetch metadata JSON
+        const metadataResponse = await axios.get(metadataUrl);
+        const metadata = metadataResponse.data;
+
+        // Find corresponding media file CID from metadata
+        const mediaCid = metadata.mediaCid || metadata.fileCid;
+        if (!mediaCid) {
+          console.log(`[STARTUP] Skipping metadata ${metadataCid} - no media CID found`);
+          continue;
+        }
+
+        // Check if post already exists
+        const existingPost = posts.find(p => p.metadataCid === metadataCid);
+        if (existingPost) {
+          console.log(`[STARTUP] Post ${metadataCid} already loaded, skipping`);
+          continue;
+        }
+
+        // Reconstruct post object
+        const post: Post = {
+          id: metadata.id || metadataCid,
+          mediaCid: mediaCid,
+          mediaGatewayUrl: `https://gateway.pinata.cloud/ipfs/${mediaCid}`,
+          metadataCid: metadataCid,
+          metadataGatewayUrl: metadataUrl,
+          walletAddress: metadata.creator || metadata.walletAddress || 'unknown',
+          caption: metadata.caption || metadata.description,
+          exactHash: metadata.exactHash || '',
+          perceptualHash: metadata.perceptualHash || '',
+          audioHash: metadata.audioHash || null,
+          assetType: metadata.assetType || 'unknown',
+          mimeType: metadata.mimeType || 'application/octet-stream',
+          fileName: metadata.fileName || 'unknown',
+          fileSize: metadata.fileSize || 0,
+          status: metadata.status || 'ORIGINAL',
+          timestamp: metadata.createdAt || metadata.timestamp || new Date().toISOString(),
+          ...(metadata.onChain && { onChain: metadata.onChain }),
+          ...(metadata.originalCreator && { originalCreator: metadata.originalCreator }),
+          ...(metadata.matchType && { matchType: metadata.matchType }),
+          ...(metadata.confidence && { confidence: metadata.confidence })
+        };
+
+        posts.push(post);
+        console.log(`[STARTUP] ✓ Loaded post: ${post.id} (${post.assetType})`);
+      } catch (error) {
+        console.error(`[STARTUP] Failed to load metadata file ${file.ipfs_pin_hash}:`, error);
+      }
+    }
+
+    console.log(`[STARTUP] ✓ Successfully loaded ${posts.length} posts from Pinata`);
+  } catch (error) {
+    console.error('[STARTUP] Error loading posts from Pinata:', error);
+  }
+}
 
 // ============ MIDDLEWARE CONFIGURATION ============
 
@@ -747,13 +850,18 @@ app.use((error: Error, _req: Request, res: Response, _next: NextFunction): void 
  */
 const PORT: number = parseInt(process.env.PORT || '3001', 10);
 
-app.listen(PORT, (): void => {
+app.listen(PORT, async (): Promise<void> => {
   console.log('=================================');
   console.log('VideoGuard Backend Server');
   console.log('=================================');
   console.log(`Server running on http://localhost:${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
   console.log(`Upload endpoint: POST http://localhost:${PORT}/upload`);
+  console.log('=================================');
+  
+  // Load existing posts from Pinata
+  await loadPostsFromPinata();
+  
   console.log('=================================');
   console.log('Waiting for requests...\n');
 });

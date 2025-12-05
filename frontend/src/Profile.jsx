@@ -22,6 +22,35 @@ function Profile() {
     // Check if user is authenticated (either Firebase Auth or wallet login)
     const walletLoginActive = localStorage.getItem('walletLoginActive');
     const walletLoginUserId = localStorage.getItem('walletLoginUserId');
+    const connectedWallet = localStorage.getItem('connectedWallet');
+    
+    // Check MetaMask connection and sync with localStorage
+    const checkWalletConnection = async () => {
+      if (window.ethereum && connectedWallet) {
+        try {
+          const provider = new ethers.BrowserProvider(window.ethereum);
+          const accounts = await provider.send("eth_accounts", []);
+          if (accounts.length > 0 && accounts[0] !== connectedWallet) {
+            // Wallet changed, update localStorage
+            localStorage.setItem('connectedWallet', accounts[0]);
+            // Try to load profile for new wallet
+            const walletResult = await firestoreOperations.getUserByWallet(accounts[0]);
+            if (walletResult.success && walletResult.data) {
+              localStorage.setItem('walletLoginUserId', walletResult.data.id);
+              localStorage.setItem('walletLoginActive', 'true');
+              localStorage.setItem('walletAddress', accounts[0]);
+              if (walletResult.data.email) {
+                localStorage.setItem('walletLoginEmail', walletResult.data.email);
+              }
+              fetchUserData();
+              return;
+            }
+          }
+        } catch (error) {
+          console.error('Error checking wallet connection:', error);
+        }
+      }
+    };
     
     if (!auth.currentUser && walletLoginActive !== 'true') {
       navigate("/login");
@@ -35,41 +64,45 @@ function Profile() {
       return;
     }
 
-    // Fetch user data from Firestore
-    fetchUserData();
+    // Check wallet connection first, then fetch user data
+    checkWalletConnection().then(() => {
+      fetchUserData();
+    });
     
-    // Restore wallet connection if exists
-    restoreWalletConnection();
-  }, [navigate]);
-  
-  const restoreWalletConnection = async () => {
-    try {
-      const savedWalletAccount = localStorage.getItem('connectedWalletAccount');
-      
-      if (savedWalletAccount && window.ethereum) {
-        const provider = new ethers.BrowserProvider(window.ethereum);
-        const accounts = await provider.send("eth_accounts", []);
-        
-        // Check if the saved account is still connected
-        if (accounts.includes(savedWalletAccount)) {
-          console.log("Restored wallet connection in Profile:", savedWalletAccount);
-          
-          // Fetch user data for this wallet
-          const result = await firestoreOperations.getUserByWallet(savedWalletAccount);
-          if (result.success && result.data) {
-            setUserData({ id: result.data.id, ...result.data });
-            setEditFormData({
-              displayName: result.data.displayName || "",
-              bio: result.data.bio || "",
-              dob: result.data.dob || "",
-            });
+    // Listen for account changes
+    if (window.ethereum) {
+      const handleAccountsChanged = async (accounts) => {
+        if (accounts.length > 0) {
+          localStorage.setItem('connectedWallet', accounts[0]);
+          console.log("Wallet account changed to:", accounts[0]);
+          // Try to load profile for new wallet
+          try {
+            const walletResult = await firestoreOperations.getUserByWallet(accounts[0]);
+            if (walletResult.success && walletResult.data) {
+              localStorage.setItem('walletLoginUserId', walletResult.data.id);
+              localStorage.setItem('walletLoginActive', 'true');
+              localStorage.setItem('walletAddress', accounts[0]);
+              if (walletResult.data.email) {
+                localStorage.setItem('walletLoginEmail', walletResult.data.email);
+              }
+              fetchUserData();
+            }
+          } catch (error) {
+            console.log('Error loading profile for wallet:', error);
           }
+        } else {
+          localStorage.removeItem('connectedWallet');
+          console.log("Wallet disconnected");
         }
-      }
-    } catch (error) {
-      console.error("Error restoring wallet connection:", error);
+      };
+      
+      window.ethereum.on('accountsChanged', handleAccountsChanged);
+      
+      return () => {
+        window.ethereum.removeListener('accountsChanged', handleAccountsChanged);
+      };
     }
-  };
+  }, [navigate]);
 
   const fetchUserData = async () => {
     try {
