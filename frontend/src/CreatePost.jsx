@@ -407,17 +407,17 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4" style={{ fontFamily: "'JetBrains Mono', monospace" }}>
+      <div className="bg-white border border-slate-200 rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-card">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-slate-800">
-          <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+        <div className="flex items-center justify-between p-6 border-b border-slate-200">
+          <h2 className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
             Create Post
           </h2>
           <button
             onClick={handleClose}
             disabled={uploading}
-            className="text-slate-400 hover:text-slate-300 disabled:opacity-50 disabled:cursor-not-allowed text-2xl"
+            className="text-slate-500 hover:text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed text-2xl font-bold"
           >
             ×
           </button>
@@ -426,7 +426,7 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
         {/* Content */}
         <div className="p-6">
           {error && (
-            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/50 rounded-lg text-red-400 text-sm">
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
               {error}
             </div>
           )}
@@ -434,7 +434,7 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
           {/* Step 1: Select Post Type */}
           {step === 1 && (
             <div className="space-y-4">
-              <p className="text-slate-400 text-sm mb-6">
+              <p className="text-slate-600 text-sm mb-6">
                 Choose the type of content you want to post
               </p>
 
@@ -445,13 +445,13 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
                     setPostType('text');
                     setStep(2);
                   }}
-                  className="p-6 bg-slate-800 hover:bg-slate-700 border-2 border-slate-700 hover:border-blue-500 rounded-xl transition-all group"
+                  className="p-6 bg-slate-50 hover:bg-slate-100 border-2 border-slate-200 hover:border-blue-500 rounded-xl transition-all group"
                 >
                   <div className="text-4xl mb-3 group-hover:scale-110 transition-transform">
                     📝
                   </div>
-                  <h3 className="font-bold mb-1">Text</h3>
-                  <p className="text-xs text-slate-400">Share your thoughts</p>
+                  <h3 className="font-bold mb-1 text-slate-900">Text</h3>
+                  <p className="text-xs text-slate-600">Share your thoughts</p>
                 </button>
 
                 {/* Image Post */}
@@ -460,13 +460,13 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
                     setPostType('image');
                     setStep(2);
                   }}
-                  className="p-6 bg-slate-800 hover:bg-slate-700 border-2 border-slate-700 hover:border-blue-500 rounded-xl transition-all group"
+                  className="p-6 bg-slate-50 hover:bg-slate-100 border-2 border-slate-200 hover:border-blue-500 rounded-xl transition-all group"
                 >
                   <div className="text-4xl mb-3 group-hover:scale-110 transition-transform">
                     🖼️
                   </div>
-                  <h3 className="font-bold mb-1">Image</h3>
-                  <p className="text-xs text-slate-400">Upload a photo</p>
+                  <h3 className="font-bold mb-1 text-slate-900">Image</h3>
+                  <p className="text-xs text-slate-600">Upload a photo</p>
                 </button>
 
                 {/* Video Post */}
@@ -475,13 +475,13 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
                     setPostType('video');
                     setStep(2);
                   }}
-                  className="p-6 bg-slate-800 hover:bg-slate-700 border-2 border-slate-700 hover:border-blue-500 rounded-xl transition-all group"
+                  className="p-6 bg-slate-50 hover:bg-slate-100 border-2 border-slate-200 hover:border-blue-500 rounded-xl transition-all group"
                 >
                   <div className="text-4xl mb-3 group-hover:scale-110 transition-transform">
                     🎥
                   </div>
-                  <h3 className="font-bold mb-1">Video</h3>
-                  <p className="text-xs text-slate-400">Share a video</p>
+                  <h3 className="font-bold mb-1 text-slate-900">Video</h3>
+                  <p className="text-xs text-slate-600">Share a video</p>
                 </button>
 
                 {/* Audio Post */}
@@ -490,13 +490,13 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
                     setPostType('audio');
                     setStep(2);
                   }}
-                  className="p-6 bg-slate-800 hover:bg-slate-700 border-2 border-slate-700 hover:border-blue-500 rounded-xl transition-all group"
+                  className="p-6 bg-slate-50 hover:bg-slate-100 border-2 border-slate-200 hover:border-blue-500 rounded-xl transition-all group"
                 >
                   <div className="text-4xl mb-3 group-hover:scale-110 transition-transform">
                     🎵
                   </div>
-                  <h3 className="font-bold mb-1">Audio</h3>
-                  <p className="text-xs text-slate-400">Upload audio</p>
+                  <h3 className="font-bold mb-1 text-slate-900">Audio</h3>
+                  <p className="text-xs text-slate-600">Upload audio</p>
                 </button>
               </div>
             </div>
@@ -508,7 +508,7 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
               <button
                 onClick={() => setStep(1)}
                 disabled={uploading}
-                className="text-blue-400 hover:text-blue-300 text-sm flex items-center gap-2 disabled:opacity-50"
+                className="text-blue-600 hover:text-blue-700 text-sm flex items-center gap-2 disabled:opacity-50 font-medium"
               >
                 ← Back to type selection
               </button>
@@ -516,22 +516,22 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
               {/* Text Content */}
               {postType === 'text' && (
                 <div>
-                  <label className="block text-sm font-medium mb-2">Your Text</label>
-                  <textarea
-                    value={textContent}
-                    onChange={(e) => setTextContent(e.target.value)}
-                    disabled={uploading}
-                    rows="6"
-                    className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-100 resize-none disabled:opacity-50"
-                    placeholder="Share your thoughts on the blockchain..."
-                  />
+                <label className="block text-sm font-medium mb-2 text-slate-700">Your Text</label>
+                <textarea
+                  value={textContent}
+                  onChange={(e) => setTextContent(e.target.value)}
+                  disabled={uploading}
+                  rows="6"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-slate-900 resize-none disabled:opacity-50"
+                  placeholder="Share your thoughts on the blockchain..."
+                />
                 </div>
               )}
 
               {/* File Upload */}
               {postType !== 'text' && (
                 <div>
-                  <label className="block text-sm font-medium mb-2">
+                  <label className="block text-sm font-medium mb-2 text-slate-700">
                     Select {postType} file
                   </label>
                   <input
@@ -548,21 +548,21 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
                   />
                   <label
                     htmlFor="file-upload"
-                    className={`block w-full p-8 border-2 border-dashed border-slate-700 rounded-lg text-center cursor-pointer hover:border-blue-500 transition-colors ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    className={`block w-full p-8 border-2 border-dashed border-slate-300 rounded-xl text-center cursor-pointer hover:border-blue-500 transition-colors bg-slate-50 ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     {selectedFile ? (
                       <div>
-                        <p className="text-green-400 font-medium mb-2">✓ File selected</p>
-                        <p className="text-sm text-slate-400">{selectedFile.name}</p>
-                        <p className="text-xs text-slate-500 mt-1">
+                        <p className="text-green-600 font-medium mb-2">✓ File selected</p>
+                        <p className="text-sm text-slate-700">{selectedFile.name}</p>
+                        <p className="text-xs text-slate-600 mt-1">
                           {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB
                         </p>
                       </div>
                     ) : (
                       <div>
                         <div className="text-4xl mb-2">📁</div>
-                        <p className="text-slate-400">Click to select {postType} file</p>
-                        <p className="text-xs text-slate-500 mt-2">Max size: 100MB</p>
+                        <p className="text-slate-700">Click to select {postType} file</p>
+                        <p className="text-xs text-slate-600 mt-2">Max size: 100MB</p>
                       </div>
                     )}
                   </label>
@@ -573,7 +573,7 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
                       <img
                         src={filePreview}
                         alt="Preview"
-                        className="w-full max-h-64 object-contain rounded-lg bg-slate-800"
+                        className="w-full max-h-64 object-contain rounded-xl bg-slate-100 border border-slate-200"
                       />
                     </div>
                   )}
@@ -582,12 +582,12 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
                       <video
                         src={filePreview}
                         controls
-                        className="w-full max-h-64 rounded-lg bg-slate-800"
+                        className="w-full max-h-64 rounded-xl bg-slate-100 border border-slate-200"
                       />
                     </div>
                   )}
                   {filePreview && postType === 'audio' && (
-                    <div className="mt-4 p-4 bg-slate-800 rounded-lg">
+                    <div className="mt-4 p-4 bg-slate-100 rounded-xl border border-slate-200">
                       <audio src={filePreview} controls className="w-full" />
                     </div>
                   )}
@@ -596,7 +596,7 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
 
               {/* Title */}
               <div>
-                <label className="block text-sm font-medium mb-2">
+                <label className="block text-sm font-medium mb-2 text-slate-700">
                   Title {postType === 'text' ? '(optional)' : ''}
                 </label>
                 <input
@@ -604,14 +604,14 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   disabled={uploading}
-                  className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-100 disabled:opacity-50"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-slate-900 disabled:opacity-50"
                   placeholder="Add a title..."
                 />
               </div>
 
               {/* Description */}
               <div>
-                <label className="block text-sm font-medium mb-2">
+                <label className="block text-sm font-medium mb-2 text-slate-700">
                   Description (optional)
                 </label>
                 <textarea
@@ -619,7 +619,7 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
                   onChange={(e) => setDescription(e.target.value)}
                   disabled={uploading}
                   rows="3"
-                  className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-100 resize-none disabled:opacity-50"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-slate-900 resize-none disabled:opacity-50"
                   placeholder="Add a description..."
                 />
               </div>
@@ -636,7 +636,7 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
                     </span>
                     <span className="text-blue-400">{uploadProgress}%</span>
                   </div>
-                  <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                  <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-gradient-to-r from-blue-500 to-purple-500 transition-all duration-300"
                       style={{ width: `${uploadProgress}%` }}
@@ -773,7 +773,7 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
               <button
                 onClick={handleSubmit}
                 disabled={uploading || (postType === 'text' ? !textContent.trim() : !selectedFile)}
-                className="w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:from-slate-700 disabled:to-slate-700 disabled:cursor-not-allowed rounded-lg font-semibold transition-all"
+                className="w-full py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 disabled:bg-slate-300 disabled:cursor-not-allowed rounded-xl font-semibold transition-all hover:scale-105 shadow-lg text-white"
               >
                 {uploading ? 'Uploading...' : 'Create Post'}
               </button>

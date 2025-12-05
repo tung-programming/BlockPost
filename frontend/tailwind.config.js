@@ -8,6 +8,10 @@ export default {
     extend: {
       animation: {
         'blob': 'blob 7s infinite',
+        'gradient': 'gradient 8s linear infinite',
+        fontFamily: {
+        'mono': ['JetBrains Mono', 'monospace'],
+      },
       },
       keyframes: {
         blob: {
@@ -24,6 +28,20 @@ export default {
             transform: 'translate(0px, 0px) scale(1)',
           },
         },
+        gradient: {
+          '0%, 100%': {
+            'background-size': '200% 200%',
+            'background-position': 'left center',
+          },
+          '50%': {
+            'background-size': '200% 200%',
+            'background-position': 'right center',
+          },
+        },
+      },
+      boxShadow: {
+        'card': '0 10px 40px rgba(0, 0, 0, 0.1)',
+        'soft': '0 2px 15px rgba(0, 0, 0, 0.08)',
       },
     },
   },
