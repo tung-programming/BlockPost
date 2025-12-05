@@ -7,7 +7,8 @@
     "start": "node dist/api.js",
     "dev": "tsx watch src/api.ts",
     "build": "tsc",
-    "test": "jest"
+    "test": "jest",
+    "render-build": "npm install --include=dev && npm run build"
   },
   "keywords": [
     "blockchain",
