@@ -31,16 +31,43 @@ function Feed() {
       setPostsError("");
       
       const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
-      const response = await axios.get(`${API_URL}/posts`);
+      const response = await axios.get(`${API_URL}/assets`);
       
       if (response.data.success) {
-        setPosts(response.data.posts);
-        console.log(`Fetched ${response.data.posts.length} posts from backend`);
+        // Fetch metadata JSON for each asset from IPFS
+        const assetsWithMetadata = await Promise.all(
+          response.data.assets.map(async (asset) => {
+            try {
+              // Fetch metadata JSON from IPFS
+              const metadataResponse = await axios.get(asset.metadataGatewayUrl);
+              return {
+                ...asset,
+                metadata: metadataResponse.data
+              };
+            } catch (err) {
+              console.error(`Failed to fetch metadata for ${asset.id}:`, err);
+              // Return asset without metadata if fetch fails
+              return {
+                ...asset,
+                metadata: {
+                  creator: 'Unknown',
+                  createdAt: asset.timestamp,
+                  assetType: asset.assetType,
+                  title: null,
+                  description: null
+                }
+              };
+            }
+          })
+        );
+        
+        setPosts(assetsWithMetadata);
+        console.log(`Fetched ${assetsWithMetadata.length} assets with metadata from backend`);
       } else {
-        setPostsError('Failed to load posts');
+        setPostsError('Failed to load assets');
       }
     } catch (error) {
-      console.error('Error fetching posts:', error);
+      console.error('Error fetching assets:', error);
       setPostsError('Failed to connect to backend');
     } finally {
       setLoadingPosts(false);
@@ -154,28 +181,6 @@ function Feed() {
     } finally {
       setLoggingOut(false);
     }
-  };
-
-  const getStatusBadge = (status) => {
-    const badges = {
-      ORIGINAL: "bg-green-600/20 text-green-400 border-green-600",
-      EXACT_DUPLICATE: "bg-red-600/20 text-red-400 border-red-600",
-      VISUAL_MATCH: "bg-amber-600/20 text-amber-400 border-amber-600",
-      AUDIO_MATCH: "bg-purple-600/20 text-purple-400 border-purple-600",
-    };
-
-    const labels = {
-      ORIGINAL: "Original on-chain",
-      EXACT_DUPLICATE: "Exact duplicate detected",
-      VISUAL_MATCH: "Visual match (pHash)",
-      AUDIO_MATCH: "Audio match",
-    };
-
-    return (
-      <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${badges[status]}`}>
-        {labels[status]}
-      </span>
-    );
   };
 
   const truncateAddress = (address) => {
@@ -328,39 +333,54 @@ function Feed() {
                     key={post.id}
                     className="bg-slate-900 border border-slate-800 rounded-xl p-6"
                   >
+                    {/* Repost Banner */}
+                    {post.status === 'REPOST_DETECTED' && post.repost && (
+                      <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                        <div className="flex items-center gap-2 text-amber-400 text-sm font-semibold">
+                          <span>⚠️</span>
+                          <span>Repost of original content by {truncateAddress(post.repost.originalCreator)}</span>
+                        </div>
+                        <div className="text-xs text-slate-400 mt-1">
+                          {post.repost.matchType} • {post.repost.confidence}% confidence
+                        </div>
+                      </div>
+                    )}
+
                     {/* Post Header */}
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center gap-3">
                         <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center font-bold text-lg">
-                          {post.walletAddress.slice(2, 3).toUpperCase()}
+                          {post.metadata?.creator ? post.metadata.creator.slice(2, 3).toUpperCase() : 'U'}
                         </div>
                         <div>
                           <div className="font-semibold hover:text-blue-400 transition-colors">
-                            {truncateAddress(post.walletAddress)}
+                            {post.metadata?.creator ? truncateAddress(post.metadata.creator) : 'Unknown Creator'}
                           </div>
                           <div className="text-xs text-slate-500">
-                            IPFS: {post.ipfsCid.substring(0, 8)}...
+                            {post.metadata?.createdAt ? new Date(post.metadata.createdAt).toLocaleDateString() : formatTimestamp(post.timestamp)}
                           </div>
                         </div>
                       </div>
-                      <span className="text-sm text-slate-400">{formatTimestamp(post.timestamp)}</span>
+                      <span className="text-sm text-slate-400">
+                        {post.metadata?.createdAt ? formatTimestamp(post.metadata.createdAt) : formatTimestamp(post.timestamp)}
+                      </span>
                     </div>
 
                     {/* Post Title */}
-                    {post.title && (
-                      <h3 className="text-xl font-bold mb-2">{post.title}</h3>
+                    {post.metadata?.title && (
+                      <h3 className="text-xl font-bold mb-2">{post.metadata.title}</h3>
                     )}
 
                     {/* Post Description */}
-                    {post.description && (
-                      <p className="mb-4 text-slate-300">{post.description}</p>
+                    {post.metadata?.description && (
+                      <p className="mb-4 text-slate-300">{post.metadata.description}</p>
                     )}
 
                     {/* IPFS Media Content */}
                     <div className="mb-4 bg-slate-800 rounded-lg overflow-hidden">
                       {post.assetType === 'video' && (
                         <video
-                          src={post.gatewayUrl}
+                          src={post.mediaGatewayUrl}
                           controls
                           className="w-full max-h-96 object-contain"
                           preload="metadata"
@@ -370,15 +390,15 @@ function Feed() {
                       )}
                       {post.assetType === 'image' && (
                         <img
-                          src={post.gatewayUrl}
-                          alt={post.fileName}
+                          src={post.mediaGatewayUrl}
+                          alt={post.metadata?.title || post.metadata?.fileName || 'Image'}
                           className="w-full max-h-96 object-contain"
                         />
                       )}
                       {post.assetType === 'audio' && (
                         <div className="p-6">
                           <audio
-                            src={post.gatewayUrl}
+                            src={post.mediaGatewayUrl}
                             controls
                             className="w-full"
                           >
@@ -388,9 +408,9 @@ function Feed() {
                       )}
                       {!['video', 'image', 'audio'].includes(post.assetType) && (
                         <div className="p-6 text-center">
-                          <p className="text-slate-400 mb-2">📄 {post.fileName}</p>
+                          <p className="text-slate-400 mb-2">📄 {post.metadata?.fileName || 'File'}</p>
                           <a
-                            href={post.gatewayUrl}
+                            href={post.mediaGatewayUrl}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-blue-400 hover:text-blue-300 text-sm"
@@ -404,19 +424,55 @@ function Feed() {
                     {/* Status Badge and Info */}
                     <div className="flex items-center justify-between flex-wrap gap-3">
                       <div className="flex items-center gap-3">
-                        {getStatusBadge(post.status)}
+                        {post.status === 'ORIGINAL' && (
+                          <span className="px-3 py-1 rounded-full text-xs font-semibold border bg-green-600/20 text-green-400 border-green-600">
+                            ✓ Original on-chain
+                          </span>
+                        )}
+                        {post.status === 'REPOST_DETECTED' && (
+                          <span className="px-3 py-1 rounded-full text-xs font-semibold border bg-amber-600/20 text-amber-400 border-amber-600">
+                            ⚠️ Repost
+                          </span>
+                        )}
                         <span className="text-xs text-slate-500">
                           Verified via VideoGuard
                         </span>
                       </div>
-                      <a
-                        href={post.gatewayUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
-                      >
-                        🔗 IPFS
-                      </a>
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={post.mediaGatewayUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-purple-400 hover:text-purple-300 flex items-center gap-1"
+                          title="View media file on IPFS"
+                        >
+                          🎬 Media
+                        </a>
+                        <span className="text-slate-600">•</span>
+                        <a
+                          href={post.metadataGatewayUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-green-400 hover:text-green-300 flex items-center gap-1"
+                          title="View metadata JSON on IPFS"
+                        >
+                          📋 Metadata
+                        </a>
+                        {post.onChain && (
+                          <>
+                            <span className="text-slate-600">•</span>
+                            <a
+                              href={`https://amoy.polygonscan.com/tx/${post.onChain.txHash}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                              title="View transaction on PolygonScan"
+                            >
+                              🔗 TX
+                            </a>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </article>
                 ))}
