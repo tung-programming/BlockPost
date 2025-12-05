@@ -27,12 +27,14 @@ export interface DetectResult {
 
 /**
  * Contract interaction response structure from smart contract
+ * Matches the actual detectRepost return values from VideoGuard.sol
  */
 interface ContractDetectResponse {
-  isDuplicate: boolean;
+  isRepost: boolean;
   originalCreator: string;
+  originalIpfsHash: string;
   matchType: string;
-  confidence: bigint;
+  originalHash: string;
 }
 
 /**
@@ -65,8 +67,11 @@ export function getContract(): ethers.Contract {
   // Create provider
   const provider = new ethers.JsonRpcProvider(rpcUrl);
 
+  // Normalize private key (add 0x prefix if missing)
+  const normalizedPrivateKey = privateKey.startsWith('0x') ? privateKey : `0x${privateKey}`;
+
   // Create signer
-  const signer = new ethers.Wallet(privateKey, provider);
+  const signer = new ethers.Wallet(normalizedPrivateKey, provider);
 
   // Create contract instance
   const contract = new ethers.Contract(contractAddress, contractData.abi, signer);
@@ -144,10 +149,10 @@ export async function detectRepostOnChain(
     const duration = Date.now() - startTime;
 
     const detectResult: DetectResult = {
-      isDuplicate: result.isDuplicate,
+      isDuplicate: result.isRepost,
       originalCreator: result.originalCreator,
       matchType: result.matchType,
-      confidence: Number(result.confidence)
+      confidence: result.matchType === 'EXACT_MATCH' ? 100 : result.matchType === 'PERCEPTUAL_MATCH' ? 95 : result.matchType === 'AUDIO_MATCH' ? 92 : 0
     };
 
     console.log(`[BLOCKCHAIN] ✓ Detection completed in ${duration}ms`);
@@ -217,13 +222,13 @@ export async function registerAssetOnChain(params: {
     const normalizedExactHash = normalizeHash(params.exactHash);
 
     // Call contract function (costs gas)
+    // Note: Contract registerVideo takes 4 params: exactHash, perceptualHash, audioFingerprint, ipfsHash
     console.log('[BLOCKCHAIN] Sending transaction...');
     const tx = await contract.registerVideo(
       normalizedExactHash,
       params.perceptualHash,
       params.audioHash,
-      params.ipfsCid,
-      params.assetType
+      params.ipfsCid
     );
 
     console.log(`[BLOCKCHAIN] Transaction sent: ${tx.hash}`);
