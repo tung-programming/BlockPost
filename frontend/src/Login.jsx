@@ -117,8 +117,24 @@ function Login() {
         return;
       }
 
-      // Request account access
+      // Request account access with account selection prompt
       const provider = new ethers.BrowserProvider(window.ethereum);
+      
+      // First, request wallet_requestPermissions to show account selector
+      try {
+        await window.ethereum.request({
+          method: 'wallet_requestPermissions',
+          params: [{ eth_accounts: {} }]
+        });
+      } catch (permError) {
+        // User cancelled permission request
+        if (permError.code === 4001) {
+          setError("Please select an account to continue.");
+          setLoading(false);
+          return;
+        }
+      }
+      
       const accounts = await provider.send("eth_requestAccounts", []);
       const walletAddress = accounts[0];
 

@@ -253,14 +253,19 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
             console.error('[UPLOAD] ❌ Failed to register repost in backend:', registerError);
           }
           
-          // Call onPostCreated to refresh feed
-          if (onPostCreated) {
-            onPostCreated();
-          }
-          return;
+        // Call onPostCreated to refresh feed
+        if (onPostCreated) {
+          onPostCreated();
         }
         
-        // Step 2: Register NEW asset on blockchain via MetaMask
+        // Auto-close modal after 5 seconds
+        setTimeout(() => {
+          onClose();
+          resetForm();
+        }, 5000);
+        
+        return;
+      }        // Step 2: Register NEW asset on blockchain via MetaMask
         console.log('[UPLOAD] ✓ New asset detected, registering on blockchain...');
         console.log('[UPLOAD] Asset Type:', response.data.assetType);
         
@@ -332,6 +337,12 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
           onPostCreated();
         }
         
+        // Auto-close modal after 5 seconds
+        setTimeout(() => {
+          onClose();
+          resetForm();
+        }, 5000);
+        
       } catch (blockchainError) {
         setError(blockchainError.message || "Blockchain transaction failed");
         setUploading(false);
@@ -357,6 +368,12 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
       if (onPostCreated) {
         onPostCreated();
       }
+      
+      // Auto-close modal after 5 seconds
+      setTimeout(() => {
+        onClose();
+        resetForm();
+      }, 5000);
     } else if (response.data.success && response.data.status === 'NEW_ASSET_REGISTERED') {
       // Backend mode: Backend registered asset
       setUploadProgress(100);
@@ -378,6 +395,12 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
       if (onPostCreated) {
         onPostCreated();
       }
+      
+      // Auto-close modal after 5 seconds
+      setTimeout(() => {
+        onClose();
+        resetForm();
+      }, 5000);
     } else {
       throw new Error(response.data.error || "Upload failed");
     }
