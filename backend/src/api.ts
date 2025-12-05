@@ -280,6 +280,40 @@ app.post('/upload', upload.single('video'), async (req: Request, res: Response):
     };
 
     // PHASE 4: Blockchain Integration - Detect repost and register if new
+    const blockchainMode = process.env.BLOCKCHAIN_MODE || 'backend';
+    
+    if (blockchainMode === 'frontend') {
+      // Frontend mode: Return hashes and IPFS data, let frontend handle blockchain
+      const totalDuration = hashDuration + ipfsDuration;
+      
+      console.log(`[UPLOAD] ✓ Asset processed (frontend blockchain mode)`);
+      console.log(`[UPLOAD] Hashes generated, IPFS uploaded`);
+      console.log(`[UPLOAD] Frontend will handle blockchain transaction\n`);
+      
+      res.json({
+        success: true,
+        status: 'READY_FOR_BLOCKCHAIN',
+        assetType: hashResult.assetType,
+        fileInfo: fileInfo,
+        hashes: {
+          exactHash: hashResult.exactHash,
+          perceptualHash: hashResult.perceptualHash,
+          audioHash: hashResult.audioHash
+        },
+        ipfs: {
+          cid: ipfsResult.cid,
+          gatewayUrl: ipfsResult.gatewayUrl
+        },
+        processingTime: {
+          hashing: `${hashDuration}ms`,
+          ipfs: `${ipfsDuration}ms`,
+          total: `${totalDuration}ms`
+        }
+      });
+      return;
+    }
+    
+    // Backend mode: Server handles blockchain transaction
     try {
       console.log('[UPLOAD] Starting blockchain interaction...');
       const blockchainStartTime = Date.now();

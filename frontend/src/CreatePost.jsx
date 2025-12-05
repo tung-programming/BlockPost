@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { auth } from "./firebase/config";
 import { firestoreOperations } from "./firebase/firestoreRefs";
 import axios from "axios";
+import { registerAssetOnChain, detectRepost } from "./utils/blockchain";
 
 function CreatePost({ isOpen, onClose, onPostCreated }) {
   const navigate = useNavigate();
@@ -166,35 +167,70 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
       }
     });
 
-    if (response.data.success) {
-      setUploadProgress(100);
-      setUploadStatus("complete");
-      console.log("Post created successfully:", response.data);
+    if (response.data.success && response.data.status === 'READY_FOR_BLOCKCHAIN') {
+      // Backend returned hashes and IPFS, now handle blockchain on frontend
+      setUploadProgress(95);
+      setUploadStatus("blockchain");
+      console.log("File uploaded, initiating blockchain transaction...");
       
-      // Store blockchain data to display
-      if (response.data.status === 'NEW_ASSET_REGISTERED' && response.data.onChain) {
+      try {
+        // Step 1: Check for repost
+        setError("Checking for duplicates on blockchain...");
+        const detectResult = await detectRepost(
+          response.data.hashes.exactHash,
+          response.data.hashes.perceptualHash,
+          response.data.hashes.audioHash
+        );
+        
+        if (detectResult.isDuplicate) {
+          // Repost detected
+          setUploadProgress(100);
+          setUploadStatus("complete");
+          setError("");
+          
+          setBlockchainData({
+            status: 'REPOST_DETECTED',
+            originalCreator: detectResult.originalCreator,
+            matchType: detectResult.matchType,
+            ipfsCid: response.data.ipfs.cid,
+            gatewayUrl: response.data.ipfs.gatewayUrl
+          });
+          
+          console.log("Repost detected:", detectResult);
+          return;
+        }
+        
+        // Step 2: Register on blockchain via MetaMask
+        setError("Please confirm transaction in MetaMask...");
+        const blockchainResult = await registerAssetOnChain(
+          response.data.hashes.exactHash,
+          response.data.hashes.perceptualHash,
+          response.data.hashes.audioHash,
+          response.data.ipfs.cid
+        );
+        
+        setUploadProgress(100);
+        setUploadStatus("complete");
+        setError("");
+        
         setBlockchainData({
           status: 'NEW_ASSET_REGISTERED',
-          txHash: response.data.onChain.txHash,
-          blockNumber: response.data.onChain.blockNumber,
-          contractAddress: response.data.onChain.contractAddress,
-          gasUsed: response.data.onChain.gasUsed,
+          txHash: blockchainResult.txHash,
+          blockNumber: blockchainResult.blockNumber,
+          contractAddress: blockchainResult.contractAddress,
+          gasUsed: blockchainResult.gasUsed,
           ipfsCid: response.data.ipfs.cid,
           gatewayUrl: response.data.ipfs.gatewayUrl
         });
-      } else if (response.data.status === 'REPOST_DETECTED' && response.data.repost) {
-        setBlockchainData({
-          status: 'REPOST_DETECTED',
-          originalCreator: response.data.repost.originalCreator,
-          matchType: response.data.repost.matchType,
-          confidence: response.data.repost.confidence,
-          ipfsCid: response.data.ipfs.cid,
-          gatewayUrl: response.data.ipfs.gatewayUrl
-        });
+        
+        console.log("Asset registered on blockchain:", blockchainResult);
+        
+      } catch (blockchainError) {
+        setError(blockchainError.message || "Blockchain transaction failed");
+        setUploading(false);
+        console.error("Blockchain error:", blockchainError);
       }
       
-      // Keep modal open to show blockchain details
-      // User will manually close after viewing
     } else {
       throw new Error(response.data.error || "Upload failed");
     }
