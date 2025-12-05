@@ -4,50 +4,8 @@ import { signOut } from "firebase/auth";
 import { auth } from "./firebase/config";
 import { firestoreOperations } from "./firebase/firestoreRefs";
 import { ethers } from "ethers";
-
-// TODO: Replace dummyPosts with data from backend API:
-// GET `${import.meta.env.VITE_API_BASE_URL}/posts`
-
-// TODO: Integrate wallet connection (MetaMask) and show real on-chain address.
-
-const dummyPosts = [
-  {
-    id: 1,
-    authorHandle: "vtg",
-    authorAddress: "0x1234567890abcdef1234567890abcdef12345678",
-    timestamp: "2 hours ago",
-    status: "ORIGINAL",
-    caption: "Just launched my first Web3 social media post! 🚀",
-    mediaUrl: null,
-  },
-  {
-    id: 2,
-    authorHandle: "alice_dev",
-    authorAddress: "0xabcdef1234567890abcdef1234567890abcdef12",
-    timestamp: "5 hours ago",
-    status: "VISUAL_MATCH",
-    caption: "Check out this amazing blockchain visualization",
-    mediaUrl: null,
-  },
-  {
-    id: 3,
-    authorHandle: "bob_creator",
-    authorAddress: "0x9876543210fedcba9876543210fedcba98765432",
-    timestamp: "1 day ago",
-    status: "EXACT_DUPLICATE",
-    caption: "Web3 is the future of social media",
-    mediaUrl: null,
-  },
-  {
-    id: 4,
-    authorHandle: "crypto_fan",
-    authorAddress: "0xfedcba9876543210fedcba9876543210fedcba98",
-    timestamp: "2 days ago",
-    status: "AUDIO_MATCH",
-    caption: "New podcast episode about blockchain technology",
-    mediaUrl: null,
-  },
-];
+import axios from "axios";
+import CreatePost from "./CreatePost";
 
 function Feed() {
   const navigate = useNavigate();
@@ -55,11 +13,39 @@ function Feed() {
   const [userData, setUserData] = useState(null);
   const [connectingWallet, setConnectingWallet] = useState(false);
   const [walletError, setWalletError] = useState("");
+  const [posts, setPosts] = useState([]);
+  const [loadingPosts, setLoadingPosts] = useState(true);
+  const [postsError, setPostsError] = useState("");
+  const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
 
   useEffect(() => {
     // Fetch user data to check wallet link status
     fetchUserData();
+    // Fetch posts from backend
+    fetchPosts();
   }, []);
+
+  const fetchPosts = async () => {
+    try {
+      setLoadingPosts(true);
+      setPostsError("");
+      
+      const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+      const response = await axios.get(`${API_URL}/posts`);
+      
+      if (response.data.success) {
+        setPosts(response.data.posts);
+        console.log(`Fetched ${response.data.posts.length} posts from backend`);
+      } else {
+        setPostsError('Failed to load posts');
+      }
+    } catch (error) {
+      console.error('Error fetching posts:', error);
+      setPostsError('Failed to connect to backend');
+    } finally {
+      setLoadingPosts(false);
+    }
+  };
 
   const fetchUserData = async () => {
     try {
@@ -196,6 +182,21 @@ function Feed() {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
+  const formatTimestamp = (timestamp) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`;
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    return date.toLocaleDateString();
+  };
+
   return (
     <div className="min-h-screen flex">
       {/* Left Sidebar */}
@@ -221,7 +222,10 @@ function Feed() {
             <span className="font-medium">Home</span>
           </NavLink>
 
-          <button className="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 transition-colors w-full text-left">
+          <button 
+            onClick={() => setIsCreatePostOpen(true)}
+            className="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-300 hover:bg-slate-800 transition-colors w-full text-left"
+          >
             <span className="text-xl">✍️</span>
             <span className="font-medium">Post</span>
           </button>
@@ -297,53 +301,122 @@ function Feed() {
           <div className="max-w-4xl mx-auto p-4 md:p-6">
             <h2 className="text-2xl font-bold mb-6">Feed</h2>
 
-            <div className="space-y-6">
-              {dummyPosts.map((post) => (
-                <article
-                  key={post.id}
-                  className="bg-slate-900 border border-slate-800 rounded-xl p-6"
+            {loadingPosts ? (
+              <div className="flex justify-center items-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+              </div>
+            ) : postsError ? (
+              <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-6 text-center">
+                <p className="text-red-400">{postsError}</p>
+                <button
+                  onClick={fetchPosts}
+                  className="mt-4 px-6 py-2 bg-red-600 hover:bg-red-700 rounded-lg font-medium"
                 >
-                  {/* Post Header */}
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center font-bold text-lg">
-                        {post.authorHandle[0].toUpperCase()}
-                      </div>
-                      <div>
-                        <Link
-                          to={`/user/${post.authorHandle}`}
-                          className="font-semibold hover:text-blue-400 transition-colors"
-                        >
-                          @{post.authorHandle}
-                        </Link>
-                        <div className="text-sm text-slate-400">
-                          {truncateAddress(post.authorAddress)}
+                  Retry
+                </button>
+              </div>
+            ) : posts.length === 0 ? (
+              <div className="bg-slate-800/50 rounded-lg p-12 text-center">
+                <div className="text-6xl mb-4">📭</div>
+                <p className="text-slate-400 text-lg">No posts yet</p>
+                <p className="text-slate-500 text-sm mt-2">Be the first to create content!</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {posts.map((post) => (
+                  <article
+                    key={post.id}
+                    className="bg-slate-900 border border-slate-800 rounded-xl p-6"
+                  >
+                    {/* Post Header */}
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center font-bold text-lg">
+                          {post.walletAddress.slice(2, 3).toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="font-semibold hover:text-blue-400 transition-colors">
+                            {truncateAddress(post.walletAddress)}
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            IPFS: {post.ipfsCid.substring(0, 8)}...
+                          </div>
                         </div>
                       </div>
+                      <span className="text-sm text-slate-400">{formatTimestamp(post.timestamp)}</span>
                     </div>
-                    <span className="text-sm text-slate-400">{post.timestamp}</span>
-                  </div>
 
-                  {/* Post Content */}
-                  <p className="mb-4 text-slate-200">{post.caption}</p>
+                    {/* Post Caption */}
+                    {post.caption && (
+                      <p className="mb-4 text-slate-200">{post.caption}</p>
+                    )}
 
-                  {/* Media Placeholder */}
-                  {post.mediaUrl && (
-                    <div className="mb-4 bg-slate-800 rounded-lg h-64 flex items-center justify-center text-slate-500">
-                      Video/Image placeholder
+                    {/* IPFS Media Content */}
+                    <div className="mb-4 bg-slate-800 rounded-lg overflow-hidden">
+                      {post.assetType === 'video' && (
+                        <video
+                          src={post.gatewayUrl}
+                          controls
+                          className="w-full max-h-96 object-contain"
+                          preload="metadata"
+                        >
+                          Your browser does not support video playback.
+                        </video>
+                      )}
+                      {post.assetType === 'image' && (
+                        <img
+                          src={post.gatewayUrl}
+                          alt={post.fileName}
+                          className="w-full max-h-96 object-contain"
+                        />
+                      )}
+                      {post.assetType === 'audio' && (
+                        <div className="p-6">
+                          <audio
+                            src={post.gatewayUrl}
+                            controls
+                            className="w-full"
+                          >
+                            Your browser does not support audio playback.
+                          </audio>
+                        </div>
+                      )}
+                      {!['video', 'image', 'audio'].includes(post.assetType) && (
+                        <div className="p-6 text-center">
+                          <p className="text-slate-400 mb-2">📄 {post.fileName}</p>
+                          <a
+                            href={post.gatewayUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-400 hover:text-blue-300 text-sm"
+                          >
+                            View on IPFS →
+                          </a>
+                        </div>
+                      )}
                     </div>
-                  )}
 
-                  {/* Status Badge */}
-                  <div className="flex items-center gap-3 flex-wrap">
-                    {getStatusBadge(post.status)}
-                    <span className="text-xs text-slate-500">
-                      Verified via VideoGuard backend
-                    </span>
-                  </div>
-                </article>
-              ))}
-            </div>
+                    {/* Status Badge and Info */}
+                    <div className="flex items-center justify-between flex-wrap gap-3">
+                      <div className="flex items-center gap-3">
+                        {getStatusBadge(post.status)}
+                        <span className="text-xs text-slate-500">
+                          Verified via VideoGuard
+                        </span>
+                      </div>
+                      <a
+                        href={post.gatewayUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
+                      >
+                        🔗 IPFS
+                      </a>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
           </div>
         </main>
 
@@ -383,6 +456,13 @@ function Feed() {
           </div>
         </aside>
       </div>
+
+      {/* Create Post Modal */}
+      <CreatePost
+        isOpen={isCreatePostOpen}
+        onClose={() => setIsCreatePostOpen(false)}
+        onPostCreated={fetchPosts}
+      />
     </div>
   );
 }

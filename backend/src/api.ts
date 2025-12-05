@@ -25,6 +25,31 @@ dotenv.config();
 // Initialize Express application
 const app: Application = express();
 
+// ============ IN-MEMORY STORAGE ============
+/**
+ * In-memory posts storage
+ * In production, this would be replaced with a blockchain smart contract
+ * or decentralized database. For MVP, we store post metadata in memory.
+ */
+interface Post {
+  id: string;
+  ipfsCid: string;
+  gatewayUrl: string;
+  walletAddress: string;
+  caption?: string;
+  exactHash: string;
+  perceptualHash: string;
+  audioHash: string | null;
+  assetType: string;
+  mimeType: string;
+  fileName: string;
+  fileSize: number;
+  status: 'ORIGINAL' | 'EXACT_DUPLICATE' | 'VISUAL_MATCH' | 'AUDIO_MATCH';
+  timestamp: string;
+}
+
+const posts: Post[] = [];
+
 // ============ MIDDLEWARE CONFIGURATION ============
 
 /**
@@ -146,6 +171,40 @@ app.get('/health', (_req: Request, res: Response): void => {
     message: 'VideoGuard Backend API is running',
     timestamp: new Date().toISOString()
   });
+});
+
+/**
+ * Get All Posts Endpoint
+ * GET /posts
+ * 
+ * Returns all posts sorted by timestamp (newest first)
+ * Each post contains IPFS CID and metadata
+ * 
+ * Response:
+ * - Success: { success: true, posts: [...] }
+ * - Error: { success: false, error: "Error message" }
+ */
+app.get('/posts', (req: Request, res: Response): void => {
+  try {
+    // Sort posts by timestamp (newest first)
+    const sortedPosts = [...posts].sort((a, b) => 
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+
+    console.log(`[GET POSTS] Returning ${sortedPosts.length} posts`);
+
+    res.json({
+      success: true,
+      count: sortedPosts.length,
+      posts: sortedPosts
+    });
+  } catch (error) {
+    console.error('[GET POSTS ERROR]', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch posts'
+    });
+  }
 });
 
 /**
@@ -308,7 +367,8 @@ app.post('/upload', upload.single('video'), async (req: Request, res: Response):
           onChain: {
             txHash: receipt.hash,
             blockNumber: receipt.blockNumber,
-            contractAddress: process.env.CONTRACT_ADDRESS
+            contractAddress: process.env.CONTRACT_ADDRESS,
+            gasUsed: receipt.gasUsed.toString()
           },
           processingTime: {
             hashing: `${hashDuration}ms`,
