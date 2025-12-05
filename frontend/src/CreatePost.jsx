@@ -9,7 +9,8 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
   const [userData, setUserData] = useState(null);
   const [step, setStep] = useState(1); // 1: type selection, 2: upload
   const [postType, setPostType] = useState(null); // 'text', 'image', 'video', 'audio'
-  const [caption, setCaption] = useState("");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
   const [textContent, setTextContent] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
   const [filePreview, setFilePreview] = useState(null);
@@ -150,7 +151,8 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
     const formData = new FormData();
     formData.append('video', file); // Backend expects 'video' field name
     formData.append('walletAddress', userData.walletAddress);
-    formData.append('caption', caption || (postType === 'text' ? textContent : ''));
+    formData.append('title', title || file.name);
+    formData.append('description', description || (postType === 'text' ? textContent : ''));
 
     setUploadProgress(10);
 
@@ -182,7 +184,8 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
   const resetForm = () => {
     setStep(1);
     setPostType(null);
-    setCaption("");
+    setTitle("");
+    setDescription("");
     setTextContent("");
     setSelectedFile(null);
     setFilePreview(null);
@@ -387,18 +390,33 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
                 </div>
               )}
 
-              {/* Caption */}
+              {/* Title */}
               <div>
                 <label className="block text-sm font-medium mb-2">
-                  Caption {postType === 'text' ? '(optional)' : ''}
+                  Title {postType === 'text' ? '(optional)' : ''}
+                </label>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  disabled={uploading}
+                  className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-100 disabled:opacity-50"
+                  placeholder="Add a title..."
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Description (optional)
                 </label>
                 <textarea
-                  value={caption}
-                  onChange={(e) => setCaption(e.target.value)}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
                   disabled={uploading}
                   rows="3"
                   className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-100 resize-none disabled:opacity-50"
-                  placeholder="Add a caption..."
+                  placeholder="Add a description..."
                 />
               </div>
 

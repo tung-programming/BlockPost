@@ -346,9 +346,14 @@ function Feed() {
                       <span className="text-sm text-slate-400">{formatTimestamp(post.timestamp)}</span>
                     </div>
 
-                    {/* Post Caption */}
-                    {post.caption && (
-                      <p className="mb-4 text-slate-200">{post.caption}</p>
+                    {/* Post Title */}
+                    {post.title && (
+                      <h3 className="text-xl font-bold mb-2">{post.title}</h3>
+                    )}
+
+                    {/* Post Description */}
+                    {post.description && (
+                      <p className="mb-4 text-slate-300">{post.description}</p>
                     )}
 
                     {/* IPFS Media Content */}
