@@ -206,8 +206,22 @@ function Feed() {
         return;
       }
 
-      // Request account access
       const provider = new ethers.BrowserProvider(window.ethereum);
+      
+      // Always request permissions to show account selector
+      try {
+        await window.ethereum.request({
+          method: 'wallet_requestPermissions',
+          params: [{ eth_accounts: {} }]
+        });
+      } catch (permError) {
+        // User cancelled - that's okay
+        if (permError.code === 4001) {
+          return;
+        }
+      }
+      
+      // Get the selected account
       const accounts = await provider.send("eth_requestAccounts", []);
       
       if (accounts.length > 0) {
@@ -216,20 +230,24 @@ function Feed() {
       }
 
       // Listen for account changes
-      window.ethereum.on('accountsChanged', (accounts) => {
-        if (accounts.length > 0) {
-          setWalletAccount(accounts[0]);
-          console.log("Wallet account changed to:", accounts[0]);
-        } else {
-          setWalletAccount(null);
-          console.log("Wallet disconnected");
-        }
-      });
+      if (!window.ethereum._accountsChangedListenerAdded) {
+        window.ethereum.on('accountsChanged', (accounts) => {
+          if (accounts.length > 0) {
+            setWalletAccount(accounts[0]);
+            console.log("Wallet account changed to:", accounts[0]);
+          } else {
+            setWalletAccount(null);
+            console.log("Wallet disconnected");
+          }
+        });
+        window.ethereum._accountsChangedListenerAdded = true;
+      }
 
     } catch (error) {
       console.error("Error connecting wallet:", error);
       if (error.code === 4001) {
-        alert("Please connect your wallet to continue.");
+        // User rejected - just return, don't show error
+        return;
       } else {
         alert("Failed to connect wallet. Please try again.");
       }
