@@ -490,8 +490,8 @@ function Feed() {
               onClick={handleWalletClick}
               className="px-4 py-2 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 rounded-xl font-semibold transition-all hover:scale-105 shadow-lg text-white flex items-center gap-2"
             >
-              <span className="text-lg">🦊</span>
-              {walletAccount ? `${walletAccount.slice(0, 6)}...${walletAccount.slice(-4)}` : 'Connect Wallet'}
+              <span className="text-lg">🦊switch</span>
+              {walletAccount ? `${walletAccount.slice(0, 3)}...${walletAccount.slice(-4)}` : 'Connect Wallet'}
             </button>
           </div>
         </header>
