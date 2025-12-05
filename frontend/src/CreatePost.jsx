@@ -155,10 +155,14 @@ function CreatePost({ isOpen, onClose, onPostCreated }) {
     console.log('[UPLOAD] File:', file.name, 'Type:', file.type, 'Size:', file.size);
     console.log('[UPLOAD] Post Type:', postType);
     console.log('[UPLOAD] Wallet Address:', userData.walletAddress);
+    console.log('[UPLOAD] Username:', userData.username);
+    console.log('[UPLOAD] Display Name:', userData.displayName);
     
     const formData = new FormData();
     formData.append('video', file); // Backend expects 'video' field name
     formData.append('walletAddress', userData.walletAddress);
+    formData.append('username', userData.username || '');
+    formData.append('displayName', userData.displayName || '');
     formData.append('title', title || file.name);
     formData.append('description', description || (postType === 'text' ? textContent : ''));
 

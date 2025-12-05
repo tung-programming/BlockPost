@@ -247,6 +247,8 @@ app.post('/upload', upload.single('video'), async (req: Request, res: Response):
 
     // Extract wallet address and optional fields from request body
     const walletAddress = req.body.walletAddress || req.headers['x-wallet-address'] as string;
+    const username = req.body.username || null;
+    const displayName = req.body.displayName || null;
     const title = req.body.title || null;
     const description = req.body.description || null;
 
@@ -298,6 +300,8 @@ app.post('/upload', upload.single('video'), async (req: Request, res: Response):
     
     const metadata = {
       creator: walletAddress,
+      creatorName: displayName || username || null,
+      creatorUsername: username || null,
       createdAt: new Date().toISOString(),
       assetType: hashResult.assetType,
       mediaCid: mediaResult.cid,
@@ -307,6 +311,12 @@ app.post('/upload', upload.single('video'), async (req: Request, res: Response):
       fileName: req.file.originalname,
       fileSize: req.file.size
     };
+    
+    console.log('[UPLOAD] ✓ Metadata includes author info:', {
+      creator: metadata.creator,
+      creatorName: metadata.creatorName,
+      creatorUsername: metadata.creatorUsername
+    });
 
     const metadataResult = await pinJSONToIPFS(
       metadata,

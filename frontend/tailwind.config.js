@@ -6,12 +6,12 @@ export default {
   ],
   theme: {
     extend: {
-      fontFamily: {
-        'mono': ['JetBrains Mono', 'monospace'],
-      },
       animation: {
         'blob': 'blob 7s infinite',
         'gradient': 'gradient 8s linear infinite',
+        fontFamily: {
+        'mono': ['JetBrains Mono', 'monospace'],
+      },
       },
       keyframes: {
         blob: {
