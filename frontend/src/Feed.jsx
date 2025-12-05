@@ -25,7 +25,16 @@ function Feed() {
     fetchUserData();
     // Fetch posts from backend
     fetchPosts();
+    // Restore wallet connection from localStorage
+    restoreWalletConnection();
   }, []);
+  
+  // Effect to fetch user data when wallet account changes
+  useEffect(() => {
+    if (walletAccount) {
+      fetchUserDataByWallet(walletAccount);
+    }
+  }, [walletAccount]);
 
   const fetchPosts = async () => {
     try {
@@ -114,6 +123,64 @@ function Feed() {
       setPostsError('Failed to connect to backend');
     } finally {
       setLoadingPosts(false);
+    }
+  };
+
+  const restoreWalletConnection = async () => {
+    try {
+      // Check if wallet was previously connected
+      const savedWalletAccount = localStorage.getItem('connectedWalletAccount');
+      
+      if (savedWalletAccount && window.ethereum) {
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const accounts = await provider.send("eth_accounts", []);
+        
+        // Check if the saved account is still connected
+        if (accounts.includes(savedWalletAccount)) {
+          setWalletAccount(savedWalletAccount);
+          console.log("Restored wallet connection:", savedWalletAccount);
+        } else {
+          // Clear saved wallet if not connected anymore
+          localStorage.removeItem('connectedWalletAccount');
+        }
+      }
+      
+      // Set up account change listener
+      if (window.ethereum && !window.ethereum._accountsChangedListenerAdded) {
+        window.ethereum.on('accountsChanged', async (accounts) => {
+          if (accounts.length > 0) {
+            const newAccount = accounts[0];
+            setWalletAccount(newAccount);
+            localStorage.setItem('connectedWalletAccount', newAccount);
+            console.log("Wallet account changed to:", newAccount);
+          } else {
+            setWalletAccount(null);
+            localStorage.removeItem('connectedWalletAccount');
+            console.log("Wallet disconnected");
+          }
+        });
+        window.ethereum._accountsChangedListenerAdded = true;
+      }
+    } catch (error) {
+      console.error("Error restoring wallet connection:", error);
+    }
+  };
+
+  const fetchUserDataByWallet = async (walletAddress) => {
+    try {
+      console.log("Fetching user data for wallet:", walletAddress);
+      const result = await firestoreOperations.getUserByWallet(walletAddress);
+      
+      if (result.success && result.data) {
+        setUserData({ id: result.data.id, ...result.data });
+        console.log("Loaded profile for wallet:", walletAddress, result.data);
+      } else {
+        console.log("No profile found for wallet:", walletAddress);
+        // Clear user data if wallet has no profile
+        setUserData(null);
+      }
+    } catch (error) {
+      console.error("Error fetching user data by wallet:", error);
     }
   };
 
@@ -225,22 +292,11 @@ function Feed() {
       const accounts = await provider.send("eth_requestAccounts", []);
       
       if (accounts.length > 0) {
-        setWalletAccount(accounts[0]);
-        console.log("Connected wallet:", accounts[0]);
-      }
-
-      // Listen for account changes
-      if (!window.ethereum._accountsChangedListenerAdded) {
-        window.ethereum.on('accountsChanged', (accounts) => {
-          if (accounts.length > 0) {
-            setWalletAccount(accounts[0]);
-            console.log("Wallet account changed to:", accounts[0]);
-          } else {
-            setWalletAccount(null);
-            console.log("Wallet disconnected");
-          }
-        });
-        window.ethereum._accountsChangedListenerAdded = true;
+        const selectedAccount = accounts[0];
+        setWalletAccount(selectedAccount);
+        // Persist wallet connection
+        localStorage.setItem('connectedWalletAccount', selectedAccount);
+        console.log("Connected wallet:", selectedAccount);
       }
 
     } catch (error) {

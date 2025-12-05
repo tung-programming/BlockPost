@@ -37,7 +37,39 @@ function Profile() {
 
     // Fetch user data from Firestore
     fetchUserData();
+    
+    // Restore wallet connection if exists
+    restoreWalletConnection();
   }, [navigate]);
+  
+  const restoreWalletConnection = async () => {
+    try {
+      const savedWalletAccount = localStorage.getItem('connectedWalletAccount');
+      
+      if (savedWalletAccount && window.ethereum) {
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        const accounts = await provider.send("eth_accounts", []);
+        
+        // Check if the saved account is still connected
+        if (accounts.includes(savedWalletAccount)) {
+          console.log("Restored wallet connection in Profile:", savedWalletAccount);
+          
+          // Fetch user data for this wallet
+          const result = await firestoreOperations.getUserByWallet(savedWalletAccount);
+          if (result.success && result.data) {
+            setUserData({ id: result.data.id, ...result.data });
+            setEditFormData({
+              displayName: result.data.displayName || "",
+              bio: result.data.bio || "",
+              dob: result.data.dob || "",
+            });
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error restoring wallet connection:", error);
+    }
+  };
 
   const fetchUserData = async () => {
     try {
